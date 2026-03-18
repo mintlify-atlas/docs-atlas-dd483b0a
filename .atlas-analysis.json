@@ -1,0 +1,94 @@
+{
+  "projectType": "saas",
+  "projectName": "NJ Rajat Mahotsav",
+  "projectDescription": "A full-featured event platform for the Shree Swaminarayan Temple Secaucus 25th Anniversary Celebration, with event registration, admin dashboard, media galleries, and seva (service) submissions.",
+  "theme": "almond",
+  "primaryColor": "#df212b",
+  "lightColor": "#5285b2",
+  "darkColor": "#daddde",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Architecture",
+            "pages": ["architecture/overview", "architecture/project-structure", "architecture/tech-stack"]
+          }
+        ]
+      },
+      {
+        "tab": "Features",
+        "groups": [
+          {
+            "group": "Event Registration",
+            "pages": ["features/registration", "features/registration-form"]
+          },
+          {
+            "group": "Admin Portal",
+            "pages": ["features/admin-portal", "features/admin-auth", "features/admin-dashboard"]
+          },
+          {
+            "group": "Media & Content",
+            "pages": ["features/schedule", "features/media-gallery", "features/historical-timeline"]
+          },
+          {
+            "group": "Seva (Service)",
+            "pages": ["features/spiritual-seva", "features/community-seva"]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": ["development/environment-variables", "development/local-setup"]
+          },
+          {
+            "group": "Components",
+            "pages": ["development/component-system", "development/atoms", "development/molecules", "development/organisms"]
+          },
+          {
+            "group": "Integrations",
+            "pages": ["development/supabase", "development/cloudflare-cdn", "development/audio-system"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["development/deployment", "development/security"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-step event registration with Supabase backend and Zod validation",
+    "Protected admin dashboard with Google OAuth and domain-restricted access",
+    "Interactive event schedule with mobile and desktop timeline variants",
+    "Media galleries with image carousels and custom video players",
+    "Spiritual and community seva (service) submission forms",
+    "Background audio system with auto-play and user consent handling",
+    "Cloudflare R2 and Cloudflare Images CDN integration for optimized assets",
+    "Smooth scroll animations using Framer Motion, GSAP, and Locomotive Scroll",
+    "Responsive design following Atomic Design principles",
+    "CSV export for admin registration management with streaming support"
+  ],
+  "publicApiSurface": [
+    "GET/POST /api/registrations",
+    "GET /api/admin/registrations",
+    "GET /api/download",
+    "POST /api/generate-upload-urls",
+    "POST /api/generate-cs-personal-submission-upload-urls",
+    "GET/POST /auth/callback",
+    "getCloudflareImage(imageId: string)",
+    "getCloudflareImageMobileWp(imageId: string)",
+    "getCloudflareImageBiggest(imageId: string)",
+    "getR2Image(filename: string)",
+    "isAllowedAdminDomain(email: string)",
+    "isAdminDomainUser(user: WithEmail)"
+  ]
+}
