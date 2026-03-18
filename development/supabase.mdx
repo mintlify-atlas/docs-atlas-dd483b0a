@@ -10,11 +10,11 @@ The platform uses [Supabase](https://supabase.com) as its backend-as-a-service. 
 Add these to your `.env.local` file:
 
 ```bash .env.local
-NEXT_PUBLIC_SUPABASE_URL=https://efwvxiqyyunbyouemrhe.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 # Use one of the following key variables:
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
 # or (legacy name, still supported)
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
 <Warning>
@@ -174,12 +174,21 @@ export async function updateSession(request: NextRequest) {
 
 The primary table. Rows are inserted by the public registration form and read by the admin dashboard.
 
-| Column | Notes |
-|---|---|
-| `id` | Auto-incrementing primary key |
-| `ghaam` | Attendee's ghaam (regional group) |
-| `mandal` | Attendee's mandal |
-| `arrival_date` | Date of arrival |
+| Column | Type | Notes |
+|---|---|---|
+| `id` | integer | Auto-incrementing primary key |
+| `first_name` | text | Attendee first name (letters only) |
+| `middle_name` | text | Middle name, optional |
+| `last_name` | text | Attendee last name (letters only) |
+| `email` | text | Validated email with TLD check |
+| `mobile_number` | text | National number (without country code) |
+| `phone_country_code` | text | E.164 country code (e.g. `+1`) |
+| `country` | text | Attendee's country |
+| `ghaam` | text | Attendee's ancestral village/ghaam |
+| `mandal` | text | Stored mandal value (e.g. `new-jersey`) |
+| `arrival_date` | date | Arrival date (ISO format) |
+| `departure_date` | date | Departure date (ISO format) |
+| `age` | integer | Attendee's age (1–99) |
 
 Composite indexes support filtered keyset pagination used by the admin dashboard:
 
@@ -246,7 +255,7 @@ The admin dashboard at `/admin/registrations` uses Google OAuth via Supabase. On
        - `http://localhost:3000`
        - `https://njrajatmahotsav.com`
     5. Add these **Authorized redirect URIs**:
-       - `https://efwvxiqyyunbyouemrhe.supabase.co/auth/v1/callback`
+       - `https://your-project-id.supabase.co/auth/v1/callback`
        - `http://localhost:3000/auth/callback`
        - `https://njrajatmahotsav.com/auth/callback`
     6. Copy the **Client ID** and **Client Secret**.

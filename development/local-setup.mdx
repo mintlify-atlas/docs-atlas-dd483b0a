@@ -45,9 +45,10 @@ Before you begin, make sure you have:
     Create a `.env.local` file in the project root:
 
     ```bash .env.local
-    # Supabase
+    # Supabase — use PUBLISHABLE_KEY (newer) or ANON_KEY (legacy)
     NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+    # NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key  # legacy fallback
 
     # Cloudflare R2
     R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com

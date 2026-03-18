@@ -52,7 +52,9 @@ This guide walks you through cloning the repository, installing dependencies, co
     ```bash .env.local
     # Supabase — database and authentication
     NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+    # Use PUBLISHABLE_KEY (newer) or ANON_KEY (legacy) — not both
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+    # NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
     # Cloudflare R2 — object storage
     R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
@@ -65,7 +67,7 @@ This guide walks you through cloning the repository, installing dependencies, co
     | Variable | Description |
     |---|---|
     | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL, found in Project Settings → API |
-    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anonymous (public) key |
+    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (preferred) — or use `NEXT_PUBLIC_SUPABASE_ANON_KEY` as legacy fallback |
     | `R2_ENDPOINT` | Cloudflare R2 S3-compatible endpoint for your account |
     | `R2_ACCESS_KEY_ID` | R2 API token access key ID |
     | `R2_SECRET_ACCESS_KEY` | R2 API token secret key |
@@ -73,7 +75,7 @@ This guide walks you through cloning the repository, installing dependencies, co
     | `R2_BUCKET_PREFIX` | Path prefix used for all R2 uploads |
 
     <Note>
-      `NEXT_PUBLIC_*` variables are exposed to the browser. Never place secret keys in variables with this prefix.
+      `NEXT_PUBLIC_*` variables are exposed to the browser. Never place secret keys in variables with this prefix. The Supabase key is safe to expose — access is governed by Row Level Security.
     </Note>
   </Step>
 

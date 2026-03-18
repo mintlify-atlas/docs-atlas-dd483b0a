@@ -40,7 +40,11 @@ Devotees are also inspired to complete readings of sacred scriptures. Three para
 
 ## Submission form
 
-Devotees submit their spiritual seva at `/spiritual-seva/submit` using the `SevaSubmissionForm` component (`components/organisms/seva-submission-form.tsx`).
+Devotees submit their spiritual seva at `/spiritual-seva/submit`. The form is defined inline in `app/spiritual-seva/submit/page.tsx`.
+
+<Note>
+  The route `/spiritual-seva/submit` uses a dedicated page-level form that is separate from the reusable `SevaSubmissionForm` component in `components/organisms/seva-submission-form.tsx`. The submit page includes all seva types including Upvas and scripture parayans.
+</Note>
 
 ### Form fields
 
@@ -53,12 +57,28 @@ Devotees submit their spiritual seva at `/spiritual-seva/submit` using the `Seva
 | Phone number | Yes | `isValidPhoneNumber()` via `react-phone-number-input` |
 | Country | Yes | Selector: Australia, Canada, England, India, Kenya, USA |
 | Mandal | Yes | Derived from country (dropdown or auto-filled) |
-| Seva types | Yes (≥1) | Checkbox selection from: Malas, Dhyan (Minutes), Pradakshinas, Dandvats, Padyatras (KM) |
+| Seva types | Yes (≥1) | Checkbox selection from all 9 seva types (see below) |
 | Count per seva | Yes | Positive integer for each selected seva type |
 
 <Tip>
   For India, Australia, Canada, and Kenya, the Mandal field is auto-filled and disabled. For England and USA, a dropdown of specific mandals is shown (e.g., Bolton, London for England; Alabama, California, New Jersey, etc. for USA).
 </Tip>
+
+### Seva types available
+
+All 9 seva types are available as checkboxes on the submission form:
+
+| Seva ID | Label |
+|---|---|
+| `malas` | Malas |
+| `dhyan` | Dhyan (Minutes) |
+| `pradakshinas` | Pradakshinas |
+| `dandvats` | Dandvats |
+| `padyatras` | Padyatras |
+| `sadachar` | Sadachar Sandesh Parayan |
+| `harignanamrut` | Harignanamrut Kavya Parayan |
+| `bapashree` | Bapashree ni Vato Parayan |
+| `upvas` | Upvas |
 
 ### Submission workflow
 
@@ -82,31 +102,42 @@ Devotees submit their spiritual seva at `/spiritual-seva/submit` using the `Seva
 
 ### Zod schema
 
-```typescript
-const FormSchema = z.object({
-  firstName: z.string().min(1).regex(/^[A-Za-z]+$/),
-  middleName: z.string().optional().refine(
-    (val) => !val || /^[A-Za-z]+$/.test(val)
-  ),
-  lastName: z.string().min(1).regex(/^[A-Za-z]+$/),
-  ghaam: z.string().min(1).regex(/^[A-Za-z]+$/),
-  country: z.string().min(1),
-  mandal: z.string().min(1),
-  phoneCountryCode: z.string().min(1),
-  phone: z.string().min(1).refine(isValidPhoneNumber),
-  selectedSevas: z.array(z.string()).min(1),
+The full submission form schema from `app/spiritual-seva/submit/page.tsx`:
+
+```typescript app/spiritual-seva/submit/page.tsx
+const SubmitFormSchema = z.object({
+  firstName: z.string().min(1, "First name is required").regex(/^[A-Za-z]+$/, "First name must contain only letters"),
+  middleName: z.string().optional().refine((val) => !val || /^[A-Za-z]+$/.test(val), "Middle name must contain only letters"),
+  lastName: z.string().min(1, "Last name is required").regex(/^[A-Za-z]+$/, "Last name must contain only letters"),
+  ghaam: z.string().min(1, "Ghaam is required").regex(/^[A-Za-z]+$/, "Ghaam must contain only letters"),
+  country: z.string().min(1, "Country is required"),
+  mandal: z.string().min(1, "Mandal is required"),
+  phoneCountryCode: z.string().min(1, "Phone country code is required"),
+  phone: z.string().min(1, "Phone number is required").refine((value) => value && isValidPhoneNumber(value), {
+    message: "Invalid phone number",
+  }),
+  selectedSevas: z.array(z.string()).min(1, "Please select at least one seva type"),
+  // Countable seva fields
   malas: z.string().optional(),
   dhyan: z.string().optional(),
   pradakshinas: z.string().optional(),
   dandvats: z.string().optional(),
   padyatras: z.string().optional(),
+  upvas: z.string().optional(),
+  // Scripture parayan fields
+  sadachar: z.string().optional(),
+  harignanamrut: z.string().optional(),
+  bapashree: z.string().optional(),
 }).refine((data) => {
   // All selected seva types must have a positive count
   for (const seva of data.selectedSevas) {
     const count = data[seva as keyof typeof data]
-    if (!count || parseInt(count as string) <= 0) return false
+    if (!count || count === "" || parseInt(count as string) <= 0) return false
   }
   return true
+}, {
+  message: "Please enter valid counts for all selected sevas",
+  path: ["selectedSevas"]
 })
 ```
 

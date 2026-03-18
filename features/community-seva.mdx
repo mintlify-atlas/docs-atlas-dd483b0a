@@ -109,6 +109,10 @@ const SevaFormSchema = z.object({
 | England | Dropdown: Bolton, London |
 | USA | Dropdown: Alabama, California, Chicago, Delaware, Georgia, Horseheads, Kentucky, New Jersey, Ocala, Ohio, Seattle, Tennessee, Toronto |
 
+<Note>
+  The community seva page uses an inline `getMandals()` function that includes "Toronto" as a USA mandal option. This differs from `lib/mandal-options.ts` which lists "Virginia" instead of "Toronto" for the USA. The community seva page's behavior as-shipped is documented above.
+</Note>
+
 ### Submission workflow
 
 <Steps>
