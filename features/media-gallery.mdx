@@ -1,0 +1,288 @@
+---
+title: "Media Gallery"
+description: "Image galleries, video players, and downloadable wallpapers powered by Cloudflare Images CDN and Cloudflare Stream."
+---
+
+The platform provides three distinct gallery surfaces: the `/media` wallpaper download page, the `/latest-events` events feed with inline photo albums, and the homepage video section. All images are served through Cloudflare Images; videos use either Cloudflare Stream or YouTube embeds.
+
+## CDN helpers
+
+All image URLs are constructed using helpers in `lib/cdn-assets.ts`. Never hard-code image delivery URLs directly.
+
+```typescript lib/cdn-assets.ts
+const CLOUDFLARE_IMAGES_BASE = 'https://imagedelivery.net/vdFY6FzpM3Q9zi31qlYmGA/'
+
+// Standard quality — used for most gallery images
+export const getCloudflareImage = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/bigger?format=auto&quality=90`
+
+// Mobile wallpaper variant — 9:19.5 portrait aspect ratio
+export const getCloudflareImageMobileWp = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/mobileWP?format=auto&quality=90`
+
+// Highest quality — used where maximum fidelity is required
+export const getCloudflareImageBiggest = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/biggest?format=auto&quality=100`
+```
+
+<CardGroup cols={2}>
+  <Card title="bigger" icon="image">
+    Standard gallery variant. `format=auto` serves WebP or AVIF where supported. Quality 90.
+  </Card>
+  <Card title="mobileWP" icon="mobile">
+    Portrait crop optimized for phone wallpapers. Rendered at `aspect-[9/19.5]`. Quality 90.
+  </Card>
+  <Card title="biggest" icon="maximize">
+    Full-resolution delivery. Used for archival or print-quality contexts. Quality 100.
+  </Card>
+  <Card title="R2 static assets" icon="folder">
+    Logos and icons come from Cloudflare R2 at `https://cdn.njrajatmahotsav.com`. Use `CDN_ASSETS` constants or `getR2Image(filename)`.
+  </Card>
+</CardGroup>
+
+## Image gallery components
+
+### ImageCarouselModal
+
+`components/organisms/image-carousel-modal.tsx` — a full-screen lightbox carousel used wherever a list of image URLs needs to be browsed.
+
+**Props:**
+
+| Prop | Type | Description |
+|---|---|---|
+| `images` | `string[]` | Array of image URLs |
+| `title` | `string` | Used for the accessible dialog title and `alt` text |
+| `open` | `boolean` | Controls dialog visibility |
+| `onOpenChange` | `(open: boolean) => void` | Called when the dialog should close |
+
+**Interactions:**
+
+- Left/right arrow buttons navigate between images
+- Dot indicators at the bottom jump to a specific image
+- Touch drag is supported via Framer Motion's `drag="x"` with a swipe power threshold of `10000`
+
+```typescript
+const swipePower = (offset: number, velocity: number) =>
+  Math.abs(offset) * velocity
+
+// Swipe left (next) or right (previous) when power exceeds threshold
+if (swipe < -swipeConfidenceThreshold) paginate(1)
+if (swipe >  swipeConfidenceThreshold) paginate(-1)
+```
+
+- Images use `object-contain` inside a `aspect-video` container with an orange-to-red gradient background
+- The active dot expands to `w-8`; inactive dots are `w-2 bg-white/50`
+
+<Note>
+  The dialog title is visually hidden (`className="sr-only"`) but present for screen readers.
+</Note>
+
+### PhotoAlbumModal
+
+`components/organisms/photo-album-modal.tsx` — a richer lightbox used on the `/latest-events` page. It extends the carousel pattern with a thumbnail strip and keyboard navigation.
+
+**Additional features over `ImageCarouselModal`:**
+
+- **Thumbnail strip** — a horizontally scrollable row of `64×64px` thumbnails below the main image. The active thumbnail scales up and gains an `border-orange-500` border.
+- **Counter badge** — top-left overlay showing `{currentIndex + 1} / {photos.length}`
+- **Keyboard navigation** — `ArrowLeft`, `ArrowRight`, and `Escape` keys are handled via a `window` keydown listener
+- **`initialIndex` prop** — opens the modal at a specific photo, useful when clicking a thumbnail in a grid
+- **Reset on open** — `useEffect` resets `currentIndex` to `initialIndex` whenever `open` changes to `true`
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `photos` | `EventPhoto[]` | — | Array of `{ url, caption? }` objects |
+| `title` | `string` | — | Dialog title for accessibility |
+| `open` | `boolean` | — | Controls visibility |
+| `onOpenChange` | `(open: boolean) => void` | — | Close callback |
+| `initialIndex` | `number` | `0` | Photo index to open at |
+
+### ResponsiveImageGallery
+
+`components/organisms/responsive-image-gallery.tsx` — a fixed three-image layout that switches between a CSS grid on desktop and a swipeable carousel on mobile.
+
+**Props:**
+
+| Prop | Type | Description |
+|---|---|---|
+| `images` | `[ImageData, ImageData, ImageData]` | Exactly three images (tuple) |
+
+```typescript
+interface ImageData {
+  id: number
+  src: string
+  alt: string
+}
+```
+
+<Tabs>
+  <Tab title="Desktop (md+)">
+    A `grid-cols-3 gap-0 h-[50vh]` grid. Each image uses `object-cover` and scales up 5% on hover (`group-hover:scale-105`). Items animate in with staggered `whileInView` delays (0s, 0.2s, 0.4s).
+  </Tab>
+  <Tab title="Mobile">
+    Below the `md` breakpoint, the grid is hidden and `MobileSectionCarousel` renders instead inside a `px-4 py-4` wrapper. The container height is fixed at `h-[50vh]`.
+  </Tab>
+</Tabs>
+
+## Video components
+
+### AashirwadVideoPlayer
+
+`components/organisms/aashirwad-video-player.tsx` — a standalone full-screen section that plays the main Rajat Mahotsav announcement video hosted on **Cloudflare Stream**.
+
+- The section has a dark radial gradient background (`from-slate-950 via-blue-950 to-slate-900`)
+- A Gujarati heading `સુવર્ણ યુગ નો રજત મહોત્સવ` and English subtitle `A Silver Celebration of a Golden Era` appear above the player
+- On initial render a click-to-play poster is shown using the Cloudflare Stream animated GIF thumbnail:
+  ```
+  https://customer-kss5h1dwt4mkz0x3.cloudflarestream.com/
+    6f4c127cc7b339c9b1b7875c1dc8e745/
+    thumbnails/thumbnail.gif?time=95s&duration=4s
+  ```
+- Clicking the play button sets `videoLoaded = true` and replaces the poster with a Cloudflare Stream `<iframe>` with `autoplay=true`
+- The iframe uses `padding-top: 56.42633228840125%` for exact aspect ratio preservation
+
+### VideoSection
+
+`components/organisms/video-section.tsx` — a YouTube video carousel section used on the main landing page.
+
+**Featured videos:**
+
+| Video ID | Title |
+|---|---|
+| `6rvGcN4wQCU` | Rajat Mahotsav Trailer #1 |
+| `d0vT6cSVeCY` | Rajat Mahotsav Trailer #2 |
+| `Jq_mvCRivaE` | Secaucus Temple Drone Footage |
+
+**Layout:**
+
+<Tabs>
+  <Tab title="Desktop (xl+)">
+    A `grid-cols-3` layout renders all three `VideoCard` components simultaneously. Only one video can be playing at a time — `playingVideoIndex` state tracks which card is active.
+  </Tab>
+  <Tab title="Mobile and tablet">
+    An Embla Carousel with `loop: true` shows one card at a time. Auto-advances every 4500ms. Navigating to a new slide resets the playing state (`setPlayingVideoIndex(null)`).
+  </Tab>
+</Tabs>
+
+**VideoCard behavior:**
+
+- Before play: shows YouTube `maxresdefault.jpg` thumbnail with an animated play icon
+- On click: pauses the site background audio via `useAudioContext().pause()`, then renders the YouTube embed with `autoplay=1`
+- The play icon pulses (`scale: [1, 1.05, 1]`, `opacity: [0.7, 0.9, 0.7]`) on a 2.5–3s loop and rotates 360° on hover
+
+<Tip>
+  The full YouTube playlist is linked from the section: `https://www.youtube.com/playlist?list=PLqKpGEY54C-1OklTqKwLh6JWYCDQpn5MC`
+</Tip>
+
+### VideoBackgroundSection
+
+`components/organisms/video-background-section.tsx` — a hero-style fullscreen video background using **Vimeo** embeds.
+
+- Detects device type via `useDeviceType()` and loads different Vimeo video IDs for mobile vs desktop
+- Desktop: Vimeo `1128421609`, Mobile: Vimeo `1128421563`
+- Both use `autoplay=1&muted=1&loop=1&background=1` for a silent looping background
+- Top and bottom gradient overlays (`from-slate-900`) fade the video into the surrounding page sections
+- The iframe is centered and sized to always fill the viewport: `width: 177.78vh, height: 100vh`
+
+## Media page — downloadable wallpapers
+
+The `/media` page (`app/media/page.tsx`) lets visitors download five exclusive mobile wallpapers.
+
+**Available wallpapers:**
+
+| ID | Title | Variant |
+|---|---|---|
+| 1 | GM Wallpaper 1 | `mobileWP` |
+| 2 | GM Wallpaper 2 | `mobileWP` |
+| 3 | GM Wallpaper 3 | `mobileWP` |
+| 4 | Prathna Wallpaper 1 | `mobileWP` |
+| 5 | Pebbled Wallpaper 1 | `mobileWP` |
+
+Full-resolution files are served from Cloudflare R2:
+```
+https://cdn.njrajatmahotsav.com/wallpapers/rajat_mobile_wallpaper_gm_1.jpeg
+```
+
+The download is triggered via the `/api/download` route to force a `Content-Disposition: attachment` header, preventing the browser from opening the image inline:
+
+```typescript
+const handleDownload = (wallpaper: typeof wallpapers[0]) => {
+  const filename = `rajat-mahotsav-${wallpaper.title.toLowerCase().replace(/\s+/g, "-")}.jpg`
+  const downloadUrl = `/api/download?url=${encodeURIComponent(wallpaper.fullRes)}&filename=${encodeURIComponent(filename)}`
+  const link = document.createElement("a")
+  link.href = downloadUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+```
+
+## Latest events feed
+
+The `/latest-events` page (`app/latest-events/page.tsx`) displays community events from `lib/events-data.ts` with filtering and photo browsing.
+
+**EventData structure:**
+
+```typescript lib/events-data.ts
+interface EventData {
+  id: string
+  date: string          // ISO format: "2025-03-15"
+  title: string
+  description: string
+  tags: string[]        // "community seva" | "religious" | "cultural" | "youth event"
+  youtubeVideoId?: string
+  instagramUrl?: string
+  photos: EventPhoto[]
+}
+
+interface EventPhoto {
+  url: string
+  caption?: string
+}
+```
+
+**Filtering:**
+
+- **Tag filter** — OR logic: an event is shown if it matches any selected tag
+- **Date range filter** — inclusive start and end dates
+- URL parameter `?tags=community+seva,religious` pre-selects tags on load
+- Events are sorted newest-first
+
+**Tag color palette:**
+
+| Tag | Background | Text |
+|---|---|---|
+| `community seva` | `bg-orange-100` | `text-orange-700` |
+| `religious` | `bg-red-100` | `text-red-700` |
+| `cultural` | `bg-orange-100` | `text-orange-800` |
+| `youth event` | `bg-amber-100` | `text-amber-800` |
+
+<AccordionGroup>
+  <Accordion title="Opening a photo album from an event card">
+    Clicking a photo thumbnail on an event card calls `handlePhotoClick(photos, eventTitle)`, which sets `selectedPhotos`, `selectedEventTitle`, and opens `PhotoAlbumModal`.
+
+    From within the `EventDetailsModal` (the slide-up detail sheet), clicking a photo calls `handlePhotoClickFromDetails(photoIndex)`, which also sets `photoModalInitialIndex` so the album opens at the correct photo.
+  </Accordion>
+  <Accordion title="Adding a new event">
+    Add a new object to the `eventsData` array in `lib/events-data.ts`. Use `getCloudflareImage(imageId)` for photo URLs. The `id` field must be a unique string. Events are sorted by `date` at runtime so insertion order does not matter.
+  </Accordion>
+</AccordionGroup>
+
+## GuruCarousel
+
+`components/organisms/guru-carousel.tsx` — an Embla Carousel that displays Guru portrait cards, used in sections that highlight the Guruparampara lineage.
+
+- Auto-advances every 4000ms when the carousel is visible (tracked via `IntersectionObserver` at `threshold: 0.5`)
+- Auto-advance resets after a manual swipe or dot click (`resetKey` state)
+- Dot indicators use orange (`bg-orange-500`) for the active slide and gray (`bg-gray-300`) otherwise
+- Each slide renders a `GuruCard` molecule with an `imageId` and `name`
+
+```typescript
+interface Guru {
+  imageId: string   // Cloudflare Images image ID
+  name: string
+}
+```

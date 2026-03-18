@@ -1,122 +1,85 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "NJ Rajat Mahotsav",
+  "theme": "almond",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#df212b",
+    "light": "#5285b2",
+    "dark": "#daddde"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/09b93a49-c42b-41dc-97fb-f4fb9ceb8492.png",
+  "logo": {
+    "light": "https://media.brand.dev/a7c55eb7-8a0a-4045-8f6d-83e457dca151.png",
+    "dark": "https://media.brand.dev/a7c55eb7-8a0a-4045-8f6d-83e457dca151.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/vijaykpatel/rajat-mahotsav-website"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/vijaykpatel/rajat-mahotsav-website"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Overview",
         "groups": [
           {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
           },
           {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
+            "group": "Architecture",
+            "pages": ["architecture/overview", "architecture/project-structure", "architecture/tech-stack"]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Features",
         "groups": [
           {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
+            "group": "Event Registration",
+            "pages": ["features/registration", "features/registration-form"]
           },
           {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
+            "group": "Admin Portal",
+            "pages": ["features/admin-portal", "features/admin-auth", "features/admin-dashboard"]
+          },
+          {
+            "group": "Media & Content",
+            "pages": ["features/schedule", "features/media-gallery", "features/historical-timeline"]
+          },
+          {
+            "group": "Seva (Service)",
+            "pages": ["features/spiritual-seva", "features/community-seva"]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": ["development/environment-variables", "development/local-setup"]
+          },
+          {
+            "group": "Components",
+            "pages": ["development/component-system", "development/atoms", "development/molecules", "development/organisms"]
+          },
+          {
+            "group": "Integrations",
+            "pages": ["development/supabase", "development/cloudflare-cdn", "development/audio-system"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["development/deployment", "development/security"]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

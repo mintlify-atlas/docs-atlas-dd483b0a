@@ -1,0 +1,148 @@
+---
+title: "Component System"
+description: "Atomic Design architecture and conventions used across the NJ Rajat Mahotsav platform."
+---
+
+The project organizes all UI code using the **Atomic Design** methodology. Every component lives in one of five layers, each building on the one below it.
+
+## The five layers
+
+<Columns cols={2}>
+  <Card title="Atoms" icon="circle" href="/development/atoms">
+    Smallest reusable primitives: buttons, inputs, labels, the loading screen, and the typewriter effect.
+  </Card>
+  <Card title="Molecules" icon="circle-dot" href="/development/molecules">
+    Simple composites that combine atoms: guru cards, countdown timers, phone inputs, and date pickers.
+  </Card>
+  <Card title="Organisms" icon="layout-panel-top" href="/development/organisms">
+    Complex sections that compose molecules and atoms: navigation, forms, galleries, video players, and the shader background.
+  </Card>
+  <Card title="Templates" icon="layout-template">
+    Page-level layouts. Currently minimal — add skeletons and page shells here as the project grows.
+  </Card>
+  <Card title="UI (shadcn/ui)" icon="package">
+    Third-party primitives in `components/ui/`. Maintained separately so updates from upstream are straightforward.
+  </Card>
+</Columns>
+
+## Directory structure
+
+```
+components/
+├── atoms/          # Primitives
+├── molecules/      # Simple composites
+├── organisms/      # Complex sections
+├── templates/      # Page layouts
+├── ui/             # shadcn/ui + custom registries
+├── audio-player.tsx
+└── README.md
+```
+
+## Import conventions
+
+Always import from the layer's index file, not directly from the component file. This keeps imports clean and makes it easy to refactor internal file names without touching consumers.
+
+<Steps>
+  <Step title="Import atoms">
+    ```typescript
+    import { LoadingScreen, Typewriter, ScrollToTop, ThemeProvider } from '@/components/atoms'
+    ```
+  </Step>
+  <Step title="Import molecules">
+    ```typescript
+    import { GuruCard, LazyDatePicker, LazyPhoneInput, ProgressCounter } from '@/components/molecules'
+    ```
+  </Step>
+  <Step title="Import organisms">
+    ```typescript
+    import { Navigation, SevaSubmissionForm, VideoSection, ShaderBackground } from '@/components/organisms'
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The `@/components` path alias is configured in `tsconfig.json`. Never use relative imports like `../../components/atoms` — always use the `@/` prefix.
+</Note>
+
+## Path aliases
+
+| Alias | Resolves to |
+|---|---|
+| `@/components` | `/components` |
+| `@/lib` | `/lib` |
+| `@/hooks` | `/hooks` |
+| `@/contexts` | `/contexts` |
+| `@/utils` | `/utils` |
+
+## shadcn/ui configuration
+
+The project uses **shadcn/ui New York style** with RSC enabled. Components live in `components/ui/shadcn-io/` and are imported from there. Do not modify these files directly — instead extend or wrap them in the appropriate atomic layer.
+
+To add a new shadcn/ui component:
+
+```bash
+npx shadcn@latest add <component-name>
+```
+
+## Custom component registries
+
+Three additional registries are configured alongside shadcn/ui:
+
+<AccordionGroup>
+  <Accordion title="@magicui — magicui.design">
+    Animated and interactive UI components. Used for visual effects and motion-rich elements. Install via:
+    ```bash
+    npx magicui-cli@latest add <component-name>
+    ```
+  </Accordion>
+  <Accordion title="@aceternity — ui.aceternity.com">
+    Unique, design-heavy components. Used for special visual sections. Install via:
+    ```bash
+    npx shadcn@latest add <component-name> --registry https://ui.aceternity.com/registry
+    ```
+  </Accordion>
+  <Accordion title="@skiper-ui — skiper-ui.com">
+    Premium animated components. The landing page uses `Skiper53` from this registry for the hero image carousel on desktop.
+    ```typescript
+    import { Skiper53 } from '@/components/ui/skiper-ui/skiper53'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Adding a new component
+
+<Steps>
+  <Step title="Identify the correct layer">
+    Ask: does this component stand alone with no children components? → atom. Does it compose two or more atoms? → molecule. Does it represent a full page section? → organism.
+  </Step>
+  <Step title="Create the file">
+    Use kebab-case file names. Client components must include the `"use client"` directive at the top.
+    ```typescript
+    "use client"
+
+    interface MyComponentProps {
+      label: string
+      className?: string
+    }
+
+    export default function MyComponent({ label, className = "" }: MyComponentProps) {
+      return <div className={className}>{label}</div>
+    }
+    ```
+  </Step>
+  <Step title="Export from the layer index">
+    Open the `index.ts` for the layer and add a named export:
+    ```typescript
+    export { default as MyComponent } from './my-component'
+    ```
+  </Step>
+  <Step title="Import and use">
+    ```typescript
+    import { MyComponent } from '@/components/atoms'
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Keep organisms focused on a single page section. If a component is reused across multiple pages or contains its own isolated state, it belongs in organisms even if it's visually simple.
+</Tip>

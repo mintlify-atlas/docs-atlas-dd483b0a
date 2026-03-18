@@ -1,0 +1,77 @@
+---
+title: "NJ Rajat Mahotsav"
+description: "The official event platform for the Shree Swaminarayan Temple Secaucus 25th Anniversary Celebration — July 29 to August 2, 2026."
+---
+
+<img
+  className="block"
+  src="https://media.brand.dev/a7c55eb7-8a0a-4045-8f6d-83e457dca151.png"
+  alt="NJ Rajat Mahotsav Logo"
+  style={{ maxWidth: "320px", margin: "0 auto 2rem", display: "block" }}
+/>
+
+## Welcome to the NJ Rajat Mahotsav Platform
+
+The NJ Rajat Mahotsav platform is a full-featured event website built for the **Shree Swaminarayan Temple Secaucus** Silver Jubilee celebration. It handles everything from public-facing event information to secure admin management of thousands of attendee registrations.
+
+*Rajat Mahotsav* means "Silver Jubilee" in Sanskrit — marking 25 years of the temple's presence in New Jersey. The 2026 celebration runs **July 29 – August 2** and is expected to draw thousands of devotees from across North America.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the platform running locally in under 5 minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Understand how the platform is structured
+  </Card>
+  <Card title="Event Registration" icon="clipboard-list" href="/features/registration">
+    Learn how attendee registration works
+  </Card>
+  <Card title="Admin Portal" icon="shield-halved" href="/features/admin-portal">
+    Manage registrations with the secure admin dashboard
+  </Card>
+</CardGroup>
+
+## What the platform includes
+
+<CardGroup cols={2}>
+  <Card title="Event Registration" icon="user-plus">
+    Multi-step registration forms with Supabase backend, Zod validation, and real-time feedback
+  </Card>
+  <Card title="Admin Dashboard" icon="chart-bar">
+    Protected portal with Google OAuth, registration analytics, and CSV export
+  </Card>
+  <Card title="Event Schedule" icon="calendar">
+    Interactive timeline of all five days of events — mobile and desktop variants
+  </Card>
+  <Card title="Media Galleries" icon="images">
+    Image carousels and custom video players powered by Cloudflare CDN
+  </Card>
+  <Card title="Seva Submissions" icon="hands-praying">
+    Spiritual and community service submission forms with file upload to Cloudflare R2
+  </Card>
+  <Card title="Historical Timeline" icon="clock-rotate-left">
+    55+ years of temple history from 1970 to 2026 with archival photos
+  </Card>
+</CardGroup>
+
+## Tech stack at a glance
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 4 |
+| UI Components | shadcn/ui + Radix UI |
+| Backend | Supabase (PostgreSQL + Auth) |
+| Storage | Cloudflare R2 + Cloudflare Images |
+| Auth | Google OAuth via Supabase |
+| Animations | Framer Motion, GSAP, Locomotive Scroll |
+| Deployment | Vercel |
+
+## About the event
+
+The **Shree Swaminarayan Temple Secaucus** (part of SSSSM USA) was established by Acharya Swamishree Maharaj in 1995 and has served the New Jersey Swaminarayan community for 25 years. The Rajat Mahotsav celebration brings together devotees for five days of cultural programs, religious ceremonies, and community gatherings.
+
+<Note>
+  This platform was designed and built as a portfolio project demonstrating production-quality web development with modern tooling. See the [GitHub repository](https://github.com/vijaykpatel/rajat-mahotsav-website) for the full source code.
+</Note>

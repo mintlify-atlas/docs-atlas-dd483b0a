@@ -1,0 +1,266 @@
+---
+title: "Community Seva"
+description: "Personal community service submission system for the SEVA25 Challenge, tracking volunteer hours toward the Rajat Mahotsav collective goals."
+---
+
+The Community Seva page at `/community-seva` celebrates 25 years of selfless service inspired by the core teachings of Swaminarayan Bhagwan. It hosts the **SEVA25 Challenge** — a global mission inviting all devotees of Maninagar Shree Swaminarayan Gadi Sansthan to contribute community service hours in Swaminarayan Bhagwan's name.
+
+> Twenty-Five Years of Devotion. Twenty-Five Years of Compassion. Twenty-Five Years of Community. Twenty-Five Years of Selfless Service.
+
+## The SEVA25 Challenge
+
+All Mandals and all ages are challenged to participate. Each devotee is challenged to complete a **minimum of 25 hours** of service in their local community, counting all activities completed on or after **August 1, 2025**.
+
+Devotees and mandals who complete the challenge receive recognition at the Rajat Mahotsav. **Special recognition goes to the devotee and mandal with the highest total community service hours.**
+
+### Example service projects
+
+<CardGroup cols={2}>
+  <Card title="Food & shelter" icon="utensils">
+    Volunteer at food banks or shelters, organize food or toy drives, deliver meals to families facing food insecurity.
+  </Card>
+  <Card title="Health & wellness" icon="heart-pulse">
+    Organize blood drives, support health fairs, participate in local 5K/charity walks.
+  </Card>
+  <Card title="Environment" icon="tree">
+    Plant trees, organize community clean-ups, adopt and maintain local parks.
+  </Card>
+  <Card title="Fundraising" icon="hand-holding-dollar">
+    Fundraise for a charity, organize clothing drives, support educational programs for underserved youth.
+  </Card>
+</CardGroup>
+
+## Rajat Mahotsav collective goals
+
+Progress from all submitted personal seva and community events is aggregated in real time from two Supabase tables (`community_seva_records` and `personal_seva_submission`):
+
+| Metric | Target |
+|---|---|
+| Volunteer hours | 2,500 hrs |
+| Meals served | 10,000 |
+| Community events | 25 |
+| Funds raised | $25,000 |
+
+<Note>
+  A matching gift campaign doubles every donation up to $10,000, turning a potential $10,000 contribution into $20,000 toward the $25,000 fundraising goal. All donations are tax-deductible.
+</Note>
+
+## Community initiatives
+
+The page features four active initiative areas documented in `components/organisms/bento-initiatives.tsx`:
+
+<CardGroup cols={2}>
+  <Card title="Food distribution" icon="utensils">
+    Serves over 500 families weekly through 15 distribution centers, with 200+ volunteer hours weekly and partnerships with 8 local food banks.
+  </Card>
+  <Card title="Healthcare outreach" icon="heart">
+    Monthly health camps with free checkups, screenings, and wellness education. 2,000+ people screened annually with 50+ medical volunteers.
+  </Card>
+  <Card title="Environmental care" icon="tree-pine">
+    Community beautification, tree planting (500+ trees), 25 community clean-ups, and 10 adopted parks.
+  </Card>
+  <Card title="Community events" icon="calendar">
+    15+ events hosted annually including 8 charity 5K runs, engaging 3,000+ participants and raising $50,000+ for local causes.
+  </Card>
+</CardGroup>
+
+## Personal seva submission form
+
+Devotees submit their individual community service activities using the inline form on the Community Seva page (defined in `app/community-seva/page.tsx`).
+
+### Form fields
+
+| Field | Required | Validation |
+|---|---|---|
+| First name | Yes | Letters only (`/^[A-Za-z]+$/`) |
+| Last name | Yes | Letters only |
+| Phone number | Yes | `isValidPhoneNumber()` via `react-phone-number-input` |
+| Country | Yes | Selector (Australia, Canada, England, India, Kenya, USA) |
+| Mandal | Yes | Derived from country |
+| Activity name | Yes | Free text (e.g., "Local food bank volunteering") |
+| Hours volunteered | Yes | Select: 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, or 10 hours |
+| Images | No | Up to 10 image files via drag-and-drop |
+
+### Zod schema
+
+```typescript
+const SevaFormSchema = z.object({
+  firstName: z.string().min(1).regex(/^[A-Za-z]+$/),
+  lastName: z.string().min(1).regex(/^[A-Za-z]+$/),
+  phone: z.string().min(1).refine(isValidPhoneNumber),
+  activityName: z.string().min(1),
+  country: z.string().min(1),
+  mandal: z.string().min(1),
+  hoursVolunteered: z.string().min(1).refine(
+    (val) => ["0.5","1","2","3","4","5","6","7","8","9","10"].includes(val)
+  ),
+  images: z.array(z.instanceof(File)).max(10).optional(),
+})
+```
+
+### Mandal logic
+
+| Country | Mandal behavior |
+|---|---|
+| India | Auto-filled as `Maninagar` (disabled) |
+| Australia | Auto-filled as `Perth` (disabled) |
+| Canada | Auto-filled as `Toronto` (disabled) |
+| Kenya | Auto-filled as `Nairobi` (disabled) |
+| England | Dropdown: Bolton, London |
+| USA | Dropdown: Alabama, California, Chicago, Delaware, Georgia, Horseheads, Kentucky, New Jersey, Ocala, Ohio, Seattle, Tennessee, Toronto |
+
+### Submission workflow
+
+<Steps>
+  <Step title="Open the form">
+    Click the **SUBMIT YOUR SEVA!** button on the Community Seva page. The form animates into view using Framer Motion (`AnimatePresence`).
+  </Step>
+  <Step title="Fill in your details">
+    Enter your first name, last name, phone number, country, mandal, activity name, and hours volunteered.
+  </Step>
+  <Step title="Attach photos (optional)">
+    Drag and drop up to 10 images onto the dropzone. Preview thumbnails are shown with the option to remove individual files before submission.
+  </Step>
+  <Step title="Submit the form">
+    Click **Submit Seva**. The form is validated with Zod. A `Loader2` spinner is shown while submitting.
+  </Step>
+  <Step title="Database insert">
+    The form data is inserted into the `personal_seva_submission` Supabase table:
+
+    ```typescript
+    const dbData = {
+      first_name, last_name,
+      mobile_number,   // national number extracted via parsePhoneNumber()
+      country, mandal,
+      activity_name,
+      volunteer_hours, // parsed as float
+    }
+    ```
+  </Step>
+  <Step title="File upload (if images attached)">
+    If images are included, the client calls `POST /api/generate-cs-personal-submission-upload-urls` for presigned R2 URLs, then uploads each file directly to Cloudflare R2.
+
+    After all uploads complete, the Supabase row is updated:
+
+    ```typescript
+    { images_uploaded: true, images_path: `/{submissionId}_{cleanActivityName}/` }
+    ```
+  </Step>
+  <Step title="Confirmation">
+    On success: green toast — `"Seva recorded, {firstName}! Jay Shree Swaminarayan. Thank you for your contribution."`
+
+    On failure: red toast — `"Submission failed" + error.message`
+  </Step>
+</Steps>
+
+<Warning>
+  If image upload fails after the database row is inserted, the error is thrown and a failure toast is displayed. The database record is not rolled back, but `images_uploaded` remains `false`.
+</Warning>
+
+## File upload API
+
+Community seva personal submissions use a separate endpoint from spiritual seva uploads.
+
+### API endpoint
+
+```
+POST /api/generate-cs-personal-submission-upload-urls
+```
+
+<Note>
+  The source directory name has a typo: `app/api/generate-cs-personal-submision-upload-urls/route.ts` (single `s` in "submission"). The implemented handler is an App Router route (`NextRequest` / `Response.json`), unlike the spiritual seva endpoint which uses the Pages API.
+</Note>
+
+### Request body
+
+```typescript
+type RequestBody = {
+  submissionId: string;  // UUID of the inserted Supabase row
+  activityName: string;  // Used to name the R2 subfolder
+  files: FileMetadata[]; // Array of { name: string; type: string }
+  folderName: string;    // Top-level R2 folder (hardcoded as "cs_personal_submissions")
+}
+```
+
+### Response
+
+```typescript
+type ResponsePayload = {
+  uploadUrls?: { url: string; key: string; filename: string }[];
+  error?: string;
+}
+```
+
+### R2 key format
+
+Each file is stored at:
+
+```
+{folderName}/{submissionId}_{cleanActivityName}/{filename}
+```
+
+For example:
+
+```
+cs_personal_submissions/abc-123_Local_food_bank_volunteering/photo.jpg
+```
+
+### Upload flow
+
+<Steps>
+  <Step title="Request presigned URLs">
+    Client POSTs file metadata, `submissionId`, `activityName`, and `folderName: "cs_personal_submissions"` to the API.
+  </Step>
+  <Step title="Server generates signed URLs">
+    The server creates a `PutObjectCommand` per file and signs it with `@aws-sdk/s3-request-presigner`. URLs expire in **600 seconds**.
+  </Step>
+  <Step title="Client uploads directly to R2">
+    Each file is `PUT` to its signed URL. No files pass through the Next.js server.
+  </Step>
+  <Step title="Database update">
+    After all uploads succeed, the Supabase row's `images_uploaded` and `images_path` fields are updated.
+  </Step>
+</Steps>
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `R2_ENDPOINT` | Cloudflare R2 S3-compatible endpoint URL |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | Target R2 bucket |
+
+<Note>
+  The community seva upload endpoint does not use `R2_BUCKET_PREFIX`. The full key is constructed as `{folderName}/{submissionId}_{cleanActivityName}/{filename}` with no additional prefix.
+</Note>
+
+## Toast notifications
+
+| State | Style | Message |
+|---|---|---|
+| Success | `bg-green-500 text-white` | `"Seva recorded, {firstName}! Jay Shree Swaminarayan. Thank you for your contribution."` |
+| Error | `bg-red-500 text-white` | `"Submission failed" + error.message or "Please check your connection and try again."` |
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="What activities count toward the SEVA25 Challenge?">
+    Any community service activity completed on or after **August 1, 2025** counts. Examples include volunteering at food banks, organizing blood drives, planting trees, participating in charity 5K runs, and supporting health fairs.
+  </Accordion>
+  <Accordion title="Can I submit multiple service activities?">
+    Yes. Each form submission records one activity. Submit the form once for each distinct activity you complete.
+  </Accordion>
+  <Accordion title="Are image uploads required?">
+    No. Images are optional. You can submit your seva record without attaching any photos.
+  </Accordion>
+  <Accordion title="Why is my mandal auto-filled and grayed out?">
+    For India, Australia, Canada, and Kenya, there is only one mandal per country in the system (Maninagar, Perth, Toronto, and Nairobi respectively), so the field is set automatically.
+  </Accordion>
+  <Accordion title="What are the fundraising goals?">
+    The SEVA25 fundraising goal is **$25,000**. A matching gift program doubles contributions up to $10,000 on a first-come, first-served basis, enabling the community to reach $20,000 from matched gifts alone. Donations go toward homeless shelter care kits, hot meals, health camps, environmental restoration, and educational support.
+  </Accordion>
+  <Accordion title="How is volunteer hour data aggregated for the live tracker?">
+    Hours from both `community_seva_records` (organized events) and `personal_seva_submission` (individual submissions) are summed together. The `fetchCommunityStats()` function queries both tables in parallel and combines the volunteer hour totals.
+  </Accordion>
+</AccordionGroup>

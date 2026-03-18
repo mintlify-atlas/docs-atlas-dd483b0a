@@ -1,0 +1,280 @@
+---
+title: "Audio system"
+description: "Background audio playback with user consent gating, fade effects, and a floating player component."
+---
+
+The platform plays a background prayer audio track (`prathna+anthem.mp3`) hosted on Cloudflare R2. Because browsers block autoplay without a user gesture, the system gates playback behind an explicit consent step and exposes fade controls for smooth volume transitions.
+
+## Architecture overview
+
+<CardGroup cols={2}>
+  <Card title="AudioProvider" icon="broadcast-tower">
+    React context that owns the `HTMLAudioElement`, consent state, and volume fade logic. Wraps the entire app in `layout.tsx`.
+  </Card>
+  <Card title="useAudioContext" icon="plug">
+    Hook that reads from `AudioProvider`. Use this in any component that needs to control or react to playback.
+  </Card>
+  <Card title="useAudio" icon="sliders">
+    Standalone hook that creates its own `HTMLAudioElement` for a given `src`. Use when you need a one-off audio element independent of the global player.
+  </Card>
+  <Card title="AudioPlayer" icon="circle-play">
+    Floating play/pause button fixed to the bottom-right of the viewport. Adapts its icon colour based on the background brightness at scroll position.
+  </Card>
+</CardGroup>
+
+## Provider setup
+
+`AudioProvider` is mounted in the root layout, wrapping `ThemeProvider`, so every page has access to the audio context.
+
+```tsx app/layout.tsx (excerpt)
+<LoadingProvider>
+  <AudioProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
+      <Navigation />
+      <div className="min-h-screen flex flex-col">
+        <main className="flex-1">{children}</main>
+        <StickyFooter />
+      </div>
+      <ScrollToTop />
+      <FloatingMenuButton />
+      <AudioPlayer />
+    </ThemeProvider>
+  </AudioProvider>
+</LoadingProvider>
+```
+
+<Note>
+  `ThemeProvider` is configured with `forcedTheme="light"`. The site does not support dark mode — this prevents system dark-mode preferences from altering the UI.
+</Note>
+
+## `AudioContextType` interface
+
+```typescript contexts/audio-context.tsx
+interface AudioContextType {
+  play: () => void
+  pause: () => void
+  fadeOut: (duration?: number) => void          // default 1000 ms
+  fadeToVolume: (targetVolume: number, duration?: number) => void  // default 1000 ms
+  toggle: () => void
+  isPlaying: boolean
+  isLoaded: boolean
+  hasUserConsent: boolean
+  grantConsent: () => void
+}
+```
+
+| Member | Description |
+|---|---|
+| `play` | Plays audio immediately. Requires `hasUserConsent` to be `true`. |
+| `pause` | Pauses audio immediately. |
+| `fadeOut(duration?)` | Smoothly reduces volume to zero and pauses. Default `1000 ms`. |
+| `fadeToVolume(target, duration?)` | Interpolates volume to `target` (0–1). Default `1000 ms`. |
+| `toggle` | Grants consent if not already granted, then plays or pauses. |
+| `isPlaying` | `true` while audio is playing. |
+| `isLoaded` | `true` once the audio is ready to play (fired by `canplaythrough`). |
+| `hasUserConsent` | `true` after the user has interacted with the player at least once. |
+| `grantConsent` | Marks consent without immediately playing (e.g. after an explicit user gesture). |
+
+## Browser autoplay policy
+
+Browsers require a user gesture before audio can play. `AudioProvider` handles this by:
+
+1. Creating the `Audio` element with `volume = 0` so it can preload without triggering the autoplay block.
+2. Setting `hasUserConsentRef` to `false` on mount — `play()` is a no-op until consent is granted.
+3. The `toggle()` method calls `grantConsent()` internally, so the first click on `AudioPlayer` both grants consent and starts playback.
+
+```typescript contexts/audio-context.tsx
+const grantConsent = () => {
+  hasUserConsentRef.current = true
+  setHasUserConsent(true)
+}
+
+const play = () => {
+  if (audioRef.current && hasUserConsentRef.current) {
+    audioRef.current.volume = targetVolumeRef.current
+    audioRef.current.play()
+    setIsPlaying(true)
+  }
+}
+
+const toggle = () => {
+  if (isPlaying) {
+    pause()
+  } else {
+    grantConsent()
+    if (audioRef.current) {
+      audioRef.current.volume = targetVolumeRef.current
+      audioRef.current.play()
+      setIsPlaying(true)
+    }
+  }
+}
+```
+
+## Fade effects
+
+Fades are implemented using `setInterval` over 50 steps. This avoids the Web Audio API dependency while still producing smooth transitions.
+
+<Tabs>
+  <Tab title="fadeOut">
+    Decrements volume by equal steps until it reaches zero, then pauses.
+
+    ```typescript
+    const fadeOut = (duration = 1000) => {
+      if (!audioRef.current || !isPlaying || !hasUserConsentRef.current) return
+
+      const audio = audioRef.current
+      const startVolume = audio.volume
+      const steps = 50
+      const stepTime = duration / steps
+      const volumeStep = startVolume / steps
+
+      fadeIntervalRef.current = setInterval(() => {
+        if (audio.volume > volumeStep) {
+          audio.volume = Math.max(0, audio.volume - volumeStep)
+        } else {
+          audio.volume = 0
+          audio.pause()
+          setIsPlaying(false)
+          clearInterval(fadeIntervalRef.current!)
+        }
+      }, stepTime)
+    }
+    ```
+  </Tab>
+
+  <Tab title="fadeToVolume">
+    Interpolates volume from current level to `targetVolume`. Works for both fade-in and fade-out transitions.
+
+    ```typescript
+    const fadeToVolume = (targetVolume: number, duration = 1000) => {
+      if (!audioRef.current || !hasUserConsentRef.current) return
+
+      const audio = audioRef.current
+      const startVolume = audio.volume
+      const volumeDiff = targetVolume - startVolume
+      const steps = 50
+      const stepTime = duration / steps
+      const volumeStep = volumeDiff / steps
+
+      targetVolumeRef.current = targetVolume
+
+      fadeIntervalRef.current = setInterval(() => {
+        const newVolume = audio.volume + volumeStep
+        if (
+          (volumeStep > 0 && newVolume < targetVolume) ||
+          (volumeStep < 0 && newVolume > targetVolume)
+        ) {
+          audio.volume = newVolume
+        } else {
+          audio.volume = targetVolume
+          clearInterval(fadeIntervalRef.current!)
+        }
+      }, stepTime)
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Using `useAudioContext` in a component
+
+Import `useAudioContext` wherever you need to read or control global audio:
+
+```typescript
+import { useAudioContext } from '@/contexts/audio-context'
+
+export function MyComponent() {
+  const { isPlaying, toggle, fadeToVolume } = useAudioContext()
+
+  // Reduce volume when a video is playing
+  const handleVideoPlay = () => fadeToVolume(0.2, 500)
+  const handleVideoEnd  = () => fadeToVolume(1.0, 500)
+
+  return (
+    <button onClick={toggle}>
+      {isPlaying ? 'Pause background audio' : 'Play background audio'}
+    </button>
+  )
+}
+```
+
+<Warning>
+  `useAudioContext` throws if called outside of `AudioProvider`. All pages are covered because `AudioProvider` wraps the root layout, but isolated tests or Storybook stories must wrap the component under test in `<AudioProvider>`.
+</Warning>
+
+## Standalone `useAudio` hook
+
+For audio elements independent of the global player (e.g. sound effects or inline media), use the `useAudio` hook directly:
+
+```typescript hooks/use-audio.ts
+export function useAudio(src: string) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoaded, setIsLoaded]   = useState(false)
+  const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    audioRef.current = new Audio(src)
+    audioRef.current.preload = 'auto'
+    audioRef.current.volume = 1
+    // ... event listener setup
+    return () => {
+      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current)
+      audio.pause()
+    }
+  }, [src])
+
+  // Returns: play, pause, fadeOut, toggle, isPlaying, isLoaded, audioRef
+  return { play, pause, fadeOut, toggle, isPlaying, isLoaded, audioRef }
+}
+```
+
+`useAudio` returns the same `play`, `pause`, `fadeOut`, and `toggle` controls as the global context, plus the raw `audioRef` for advanced use. Unlike `AudioContextType`, it does not implement a consent gate — call it only in response to a user gesture or after `grantConsent()` has been called.
+
+## `AudioPlayer` component
+
+The `AudioPlayer` renders a floating play/pause button. It detects the background colour at the bottom of the visible viewport and switches between light and dark icon styles accordingly.
+
+```tsx components/audio-player.tsx
+export function AudioPlayer() {
+  const { toggle, isPlaying, isLoaded } = useAudioContext()
+
+  // Detects brightness of the element near the bottom of the viewport on scroll
+  // and sets isDarkBackground for icon contrast
+
+  return (
+    <div className="fixed bottom-6 right-18 z-40">
+      <FloatingButton
+        onClick={toggle}
+        disabled={!isLoaded}
+        isDarkBackground={isDarkBackground}
+        isVisible={isLoaded}
+        className={!hasScrolled ? 'animate-float-attention' : undefined}
+        aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
+      >
+        {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+      </FloatingButton>
+    </div>
+  )
+}
+```
+
+Key behaviours:
+- The button is hidden (`isVisible={false}`) until the audio finishes loading (`isLoaded`).
+- On first page load (before scrolling), the button plays a `animate-float-attention` CSS animation to attract attention.
+- `disabled={!isLoaded}` prevents interaction before the audio source is ready.
+- The `aria-label` updates dynamically so screen readers announce the correct action.
+
+## Audio source
+
+The global background track is loaded from Cloudflare R2:
+
+```typescript
+audioRef.current = new Audio(
+  'https://cdn.njrajatmahotsav.com/audio_files/prathna%2Banthem.mp3'
+)
+audioRef.current.preload = 'auto'
+audioRef.current.volume = 0  // starts silent; volume set when consent is granted
+```
+
+To replace the track, update the URL in `contexts/audio-context.tsx` and upload the new file to R2 at the corresponding path.

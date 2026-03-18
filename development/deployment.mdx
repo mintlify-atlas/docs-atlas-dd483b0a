@@ -1,0 +1,158 @@
+---
+title: "Deployment"
+description: "Deploy the NJ Rajat Mahotsav platform to Vercel."
+---
+
+This project is configured for deployment on [Vercel](https://vercel.com). The build pipeline runs `next build` with a set of flags that keep the build fast — read the [build configuration](#build-configuration) section before your first deploy.
+
+## Prerequisites
+
+- A Vercel account
+- The repository pushed to GitHub (or GitLab / Bitbucket)
+- Supabase project and Cloudflare R2 bucket already provisioned
+- All seven environment variables ready
+
+## Deploying to Vercel
+
+<Steps>
+  <Step title="Push code to GitHub">
+    Make sure your latest changes are committed and pushed to your GitHub repository.
+
+    ```bash
+    git add .
+    git commit -m "Ready for production"
+    git push origin main
+    ```
+  </Step>
+
+  <Step title="Import the project in Vercel">
+    1. Go to [vercel.com/new](https://vercel.com/new) and click **Add New Project**.
+    2. Select your GitHub repository (`Rajat-Mahotsav-Website` or your fork).
+    3. Vercel will detect Next.js automatically — no framework preset change is needed.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Before clicking **Deploy**, add all seven environment variables in the **Environment Variables** section of the Vercel project settings.
+
+    | Variable | Where to find it |
+    | --- | --- |
+    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project → **Settings** → **API** → Project URL |
+    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → **Settings** → **API** → `anon public` key |
+    | `R2_ENDPOINT` | Cloudflare R2 bucket → **Settings** → S3 API endpoint |
+    | `R2_ACCESS_KEY_ID` | Cloudflare → **R2** → **Manage R2 API tokens** |
+    | `R2_SECRET_ACCESS_KEY` | Generated alongside `R2_ACCESS_KEY_ID` |
+    | `R2_BUCKET_NAME` | The name of your Cloudflare R2 bucket |
+    | `R2_BUCKET_PREFIX` | Folder prefix used for uploads inside the bucket (e.g. `assets/`) |
+
+    <Warning>
+      `NEXT_PUBLIC_*` variables are embedded in the client bundle at build time. Never store secrets under a `NEXT_PUBLIC_` prefix.
+    </Warning>
+
+    You can also set variables after the first deploy via **Project Settings** → **Environment Variables** in the Vercel dashboard. Redeploy after any change.
+  </Step>
+
+  <Step title="Deploy">
+    Click **Deploy**. Vercel runs `next build`, creates the serverless functions for your API routes, and publishes the site. The first build typically takes 2–4 minutes.
+
+    Once complete, Vercel gives you a preview URL (e.g. `rajat-mahotsav-website.vercel.app`). Visit `/admin/registrations` to verify the admin portal loads and Google OAuth redirects correctly.
+  </Step>
+</Steps>
+
+## Build configuration
+
+The following settings are defined in `next.config.mjs` and are active in every build.
+
+```javascript title="next.config.mjs"
+const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,   // ESLint errors will not fail the build
+  },
+  typescript: {
+    ignoreBuildErrors: true,    // TypeScript errors will not fail the build
+  },
+  images: {
+    unoptimized: true,          // Disable Next.js Image Optimization (CDN handles this)
+  },
+  experimental: {
+    optimizePackageImports: ['framer-motion'],  // Tree-shake Framer Motion
+  },
+}
+```
+
+<Warning>
+  ESLint and TypeScript errors are silenced during builds to allow the project to ship while improvements are ongoing. Before your next major release, fix all TypeScript errors and re-enable linting by removing these flags.
+</Warning>
+
+**Why `images.unoptimized: true`?** All images are served through Cloudflare Images or Cloudflare R2 via `cdn.njrajatmahotsav.com`. Next.js Image Optimization is therefore redundant and disabled to avoid double-processing.
+
+**Why `optimizePackageImports: ['framer-motion']`?** Framer Motion ships a large module graph. This flag enables Next.js to tree-shake unused exports, reducing the client bundle size.
+
+## Custom domain
+
+The CDN hostname `cdn.njrajatmahotsav.com` is configured in Cloudflare and serves assets from R2. To connect your production domain to Vercel:
+
+1. In Vercel, go to **Project Settings** → **Domains** and add your domain (e.g. `njrajatmahotsav.com`).
+2. Update your DNS records to point to Vercel (Vercel shows the exact records to add).
+3. SSL is provisioned automatically.
+
+The `cdn.njrajatmahotsav.com` subdomain is managed separately in Cloudflare and does **not** need to point to Vercel — it routes directly to R2.
+
+## squirrel.toml
+
+`squirrel.toml` is a link-crawler configuration file used for checking external links and site coverage (not part of the Vercel build). Key settings:
+
+```toml title="squirrel.toml"
+[project]
+name = "njrajatmahotsav"
+
+[crawler]
+max_pages = 100
+coverage = "surface"
+respect_robots = true
+drop_query_prefixes = ["utm_", "gclid", "fbclid"]
+```
+
+Run the crawler against a preview or production URL to audit broken links and surface coverage before a launch.
+
+## Post-deployment checklist
+
+<AccordionGroup>
+  <Accordion title="Verify environment variables">
+    - Open `/admin/registrations` and attempt a Google sign-in. If it fails with a Supabase config error, check `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+    - Trigger a file download from the admin portal to confirm R2 credentials (`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_BUCKET_PREFIX`) are correct.
+  </Accordion>
+
+  <Accordion title="Verify OAuth redirect URLs">
+    In your Supabase project under **Authentication** → **URL Configuration**, confirm the production callback URL is listed:
+
+    ```
+    https://njrajatmahotsav.com/auth/callback
+    ```
+
+    In Google Cloud Console under **Authorized redirect URIs**, confirm the same URL is present. A mismatch causes a `redirect_uri_mismatch` error.
+  </Accordion>
+
+  <Accordion title="Check security headers">
+    Use a tool like [securityheaders.com](https://securityheaders.com) to verify the following headers are present on every response:
+
+    - `X-Frame-Options: DENY`
+    - `X-Content-Type-Options: nosniff`
+    - `X-XSS-Protection: 1; mode=block`
+    - `Referrer-Policy: strict-origin-when-cross-origin`
+    - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+  </Accordion>
+
+  <Accordion title="Confirm admin domain restriction">
+    Sign in with a Google account that does **not** have an `@nj.sgadi.us` email. You should be redirected to `/admin/registrations/unauthorized`.
+  </Accordion>
+
+  <Accordion title="Review remaining security items">
+    The following items from the security audit are not yet implemented. Review them before accepting real user data:
+
+    - Rate limiting on API routes
+    - CSRF protection on forms
+    - Server-side input validation (Zod schemas duplicated in API routes)
+    - File upload type and size validation
+    - Supabase RLS policies verified for all tables
+  </Accordion>
+</AccordionGroup>

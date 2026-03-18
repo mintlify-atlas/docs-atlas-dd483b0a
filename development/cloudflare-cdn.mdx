@@ -1,0 +1,238 @@
+---
+title: "Cloudflare CDN"
+description: "Cloudflare R2 for static assets and Cloudflare Images for dynamic image delivery, including presigned upload URLs and the file download proxy."
+---
+
+The platform uses two Cloudflare services for media delivery:
+
+<CardGroup cols={2}>
+  <Card title="Cloudflare R2" icon="box">
+    Object storage for static assets (logos, icons, audio). Served via a custom domain at `cdn.njrajatmahotsav.com`. Accessed with the AWS S3-compatible SDK.
+  </Card>
+  <Card title="Cloudflare Images" icon="image">
+    Dynamic image delivery with automatic format conversion and pre-defined quality variants. Images are referenced by an opaque image ID, not a filename.
+  </Card>
+</CardGroup>
+
+## Environment variables
+
+```bash .env.local
+# Cloudflare R2 — used by presigned URL generation (server-side only)
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET_NAME=your-bucket-name
+R2_BUCKET_PREFIX=submissions/
+```
+
+<Note>
+  `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` are server-only variables (no `NEXT_PUBLIC_` prefix). They are never sent to the browser. The CDN base URL and Cloudflare Images base URL are hardcoded in `lib/cdn-assets.ts` because they are public by design.
+</Note>
+
+## CDN asset helpers
+
+`lib/cdn-assets.ts` exports a central object for all static assets and four image helper functions.
+
+### Static assets (`CDN_ASSETS`)
+
+```typescript lib/cdn-assets.ts
+const CDN_BASE_URL = 'https://cdn.njrajatmahotsav.com'
+
+export const CDN_ASSETS = {
+  // Logos
+  mainLogo:        `${CDN_BASE_URL}/main_logo.png`,
+  mainLogoNoText:  `${CDN_BASE_URL}/main_logo_no_text.png`,
+  maningarLogo:    `${CDN_BASE_URL}/maninagar_logo.png`,
+  whiteLogo:       `${CDN_BASE_URL}/white_logo.png`,
+  linenLogo:       `${CDN_BASE_URL}/LinenLogo.png`,
+
+  // Icons
+  instagramIcon:   `${CDN_BASE_URL}/Instagram_Glyph_Gradient.png`,
+  youtubeIcon:     `${CDN_BASE_URL}/youtube_red_icon.png`,
+  tilak:           `${CDN_BASE_URL}/Tilak.png`,
+}
+```
+
+Import `CDN_ASSETS` wherever you need a static asset URL:
+
+```typescript
+import { CDN_ASSETS } from '@/lib/cdn-assets'
+
+<img src={CDN_ASSETS.mainLogo} alt="NJ Rajat Mahotsav logo" />
+```
+
+### Dynamic image helpers
+
+Cloudflare Images serves variants of each image. All helpers append `?format=auto` so Cloudflare negotiates WebP or AVIF based on the browser's `Accept` header.
+
+```typescript lib/cdn-assets.ts
+const CLOUDFLARE_IMAGES_BASE = 'https://imagedelivery.net/vdFY6FzpM3Q9zi31qlYmGA/'
+
+// Standard quality — use for most images
+export const getCloudflareImage = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/bigger?format=auto&quality=90`
+
+// Mobile wallpaper variant — optimised for narrow viewports
+export const getCloudflareImageMobileWp = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/mobileWP?format=auto&quality=90`
+
+// Maximum quality — use for hero images or OG images
+export const getCloudflareImageBiggest = (imageId: string) =>
+  `${CLOUDFLARE_IMAGES_BASE}${imageId}/biggest?format=auto&quality=100`
+
+// Raw R2 path helper — for files stored in R2 by path
+export const getR2Image = (filename: string) =>
+  `${CDN_BASE_URL}${filename}`
+```
+
+### Image variants summary
+
+| Helper | Variant | Quality | Intended use |
+|---|---|---|---|
+| `getCloudflareImage` | `bigger` | 90 | General images, gallery cards |
+| `getCloudflareImageMobileWp` | `mobileWP` | 90 | Mobile background / wallpaper |
+| `getCloudflareImageBiggest` | `biggest` | 100 | Hero images, OG meta images |
+| `getR2Image` | — | — | R2-hosted files referenced by path |
+
+```typescript Usage examples
+import {
+  getCloudflareImage,
+  getCloudflareImageMobileWp,
+  getCloudflareImageBiggest,
+  getR2Image,
+} from '@/lib/cdn-assets'
+
+// Gallery thumbnail
+const thumb = getCloudflareImage('5aeb6c7e-f6ea-45b1-da4a-823279172400')
+
+// Mobile hero background
+const mobileHero = getCloudflareImageMobileWp('5aeb6c7e-f6ea-45b1-da4a-823279172400')
+
+// OG image (full quality)
+const ogImage = getCloudflareImageBiggest('5aeb6c7e-f6ea-45b1-da4a-823279172400')
+
+// R2 audio file
+const audioUrl = getR2Image('/audio_files/prathna%2Banthem.mp3')
+```
+
+## Presigned upload URLs
+
+File uploads (seva submissions) never go directly through the Next.js server. Instead, the browser requests a short-lived presigned URL from a Route Handler, then uploads the file directly to R2 using that URL.
+
+The S3 client is initialised once per cold start using R2's S3-compatible endpoint:
+
+```typescript app/api/generate-cs-personal-submision-upload-urls/route.ts
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+
+const s3Client = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT as string,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID as string,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY as string,
+  },
+})
+```
+
+### `POST /api/generate-cs-personal-submision-upload-urls`
+
+Generates one presigned `PUT` URL per file. URLs expire after **600 seconds**.
+
+**Request body:**
+
+```typescript
+{
+  submissionId: string     // Unique ID for this submission
+  activityName: string     // Name of the seva activity
+  files: Array<{
+    name: string           // Original filename
+    type: string           // MIME type (e.g. "image/jpeg")
+  }>
+  folderName: string       // Top-level folder in the bucket
+}
+```
+
+**Response:**
+
+```typescript
+{
+  uploadUrls: Array<{
+    url: string      // Presigned PUT URL — upload directly from the browser
+    key: string      // Object key in the bucket
+    filename: string // Original filename
+  }>
+}
+```
+
+The object key follows this pattern:
+
+```
+{folderName}/{submissionId}_{activityName}/{filename}
+```
+
+```typescript Route Handler (excerpt)
+export async function POST(request: NextRequest) {
+  const body: RequestBody = await request.json()
+  const { submissionId, activityName, files, folderName } = body
+
+  const uploadUrls = []
+
+  for (const file of files) {
+    const cleanActivityName = activityName.trim().replace(/\s+/g, '_')
+    const key = `${folderName}/${submissionId}_${cleanActivityName}/${file.name}`
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME as string,
+      Key: key,
+      ContentType: file.type,
+    })
+
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 600 })
+    uploadUrls.push({ url, key, filename: file.name })
+  }
+
+  return Response.json({ uploadUrls })
+}
+```
+
+<Tip>
+  After receiving the presigned URLs, use a standard `fetch` with `method: 'PUT'` and the file as the body. Set the `Content-Type` header to match the `type` you sent in the request.
+</Tip>
+
+## File download proxy
+
+`GET /api/download` proxies file downloads from allowed CDN domains. It exists to force a `Content-Disposition: attachment` header — browsers do not allow cross-origin downloads via an anchor tag directly.
+
+**Query parameters:**
+
+| Parameter | Description |
+|---|---|
+| `url` | Full HTTPS URL of the file to download |
+| `filename` | Desired download filename (sanitised server-side) |
+
+**Allowed domains:**
+
+```typescript
+const ALLOWED_DOMAINS = [
+  'cdn.njrajatmahotsav.com',
+  'imagedelivery.net',
+]
+```
+
+**Constraints enforced:**
+- HTTPS only — `http:` URLs are rejected with `403`.
+- Domain allowlist — any host not in `ALLOWED_DOMAINS` is rejected with `403`.
+- Private IP ranges blocked — requests to `localhost`, `127.x`, `10.x`, `192.168.x`, etc. are rejected.
+- Maximum file size: **10 MB** — checked via `Content-Length` header and again after the response body is buffered.
+- Request timeout: **10 seconds**.
+- Filename sanitised to `[a-zA-Z0-9._-]` to prevent path traversal.
+
+```typescript Usage from the browser
+const downloadUrl = `/api/download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent('photo.jpg')}`
+window.location.href = downloadUrl
+```
+
+<Warning>
+  Do not remove or loosen the domain allowlist. The download proxy would otherwise be abusable as an open redirect or SSRF vector against internal services.
+</Warning>

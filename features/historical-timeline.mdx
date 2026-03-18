@@ -1,0 +1,175 @@
+---
+title: "Historical Timeline"
+description: "A 55-year visual chronicle of Shree Swaminarayan Temple Secaucus from 1970 through 2026, with desktop parallax scroll and mobile swipe navigation."
+---
+
+The historical timeline traces the journey of Shree Swaminarayan Temple Secaucus from Jeevanpran Shree Muktajeevan Swamibapa's first visit to the USA in 1970 through the Rajat Mahotsav celebrations in 2026. On desktop it renders as a parallax scroll experience powered by GSAP and Locomotive Scroll; on mobile it becomes a vertically stacked swipe-friendly feed.
+
+## Data source
+
+All milestone data lives in `lib/timeline-data.ts` as the exported `timelineData` array.
+
+**Data structure:**
+
+```typescript lib/timeline-data.ts
+import { getCloudflareImage } from "@/lib/cdn-assets"
+
+const timelineData = [
+  {
+    year: string,        // Display year label
+    title: string,       // Milestone title
+    description: string, // Currently empty; reserved for future use
+    speed: number,       // Parallax scroll speed: positive scrolls down, negative up
+    image: string,       // Full Cloudflare Images URL via getCloudflareImage()
+  }
+]
+```
+
+The `speed` property alternates between `3` and `-3` across entries, creating a staggered parallax offset as the user scrolls.
+
+## Milestones (1970–2026)
+
+30 entries spanning 56 years of temple history:
+
+| Year | Milestone |
+|---|---|
+| 1970 | Jeevanpran Shree Muktajeevan Swamibapa's First Visit to USA |
+| 1987 | Acharya Swamishree Maharaj establishes SSSSM USA |
+| 1992 | Acharya Swamishree Maharaj's Second Visit to USA |
+| 1995 | Acharya Swamishree Maharaj establishes New Jersey Hari Mandir |
+| 1998 | Secaucus Temple Ground Breaking |
+| 1999 | Acharya Swamishree Maharaj Visits Temple Construction Site |
+| 2001 | Suvarna Tula Murti Pratishtha Opening |
+| 2002 | Muktajeevan Swamibapa Community Hall Opening |
+| 2003 | First Youth Satsang Shibir USA |
+| 2004 | Acharya Swamishree Maharaj Helicopter Arrival |
+| 2005 | Secaucus Temple's First Health Camp |
+| 2006 | 5th Patotsav & Rangotsav |
+| 2007 | Shatabdi Mahotsav |
+| 2008 | Buchmuller Park Cultural Program |
+| 2009 | Diwali Annakut |
+| 2010 | Father's Day Celebration |
+| 2011 | New Jersey Dashabdi Mahotsav |
+| 2012 | Platinum Tula |
+| 2013 | Swamibapa Pipe Band USA 10th Anniversary |
+| 2014 | Flash Mob Welcome Dance |
+| 2015 | One World Trade Center Visit |
+| 2016 | Smruti Mandir Rajat Mahotsav Dance |
+| 2017 | Sadbhav Amrut Parva |
+| 2018 | New Loya Shakotsav |
+| 2019 | Acharya Swamishree Maharaj Final USA Vicharan |
+| 2020 | Acharya Swamishree Maharaj Memorial |
+| 2021 | 20th Patotsav Celebrations |
+| 2022 | Acharya Swamishree Maharaj Asthi |
+| 2023 | Chandan Darshan |
+| 2024 | Guruparampara Grand Hindolo |
+| 2025 | Acharya Swamiji Maharaj is showered with flower petals |
+| 2026 | Something Extraordinary Awaits… |
+
+<Note>
+  The 2026 entry uses the R2 CDN logo URL (`https://cdn.njrajatmahotsav.com/main_logo.png`) rather than a Cloudflare Images ID, as the commemorative photo for the Mahotsav is not yet available.
+</Note>
+
+## Cloudflare Images integration
+
+Every historical photo is served through Cloudflare Images using the `bigger` variant:
+
+```typescript
+export const getCloudflareImage = (imageId: string) =>
+  `https://imagedelivery.net/vdFY6FzpM3Q9zi31qlYmGA/${imageId}/bigger?format=auto&quality=90`
+```
+
+This variant automatically negotiates WebP or AVIF delivery and applies 90% quality compression, keeping archival images visually sharp while minimizing bandwidth.
+
+To add or replace a timeline photo:
+1. Upload the image to Cloudflare Images
+2. Copy the resulting image ID
+3. Pass it to `getCloudflareImage()` in the relevant entry in `lib/timeline-data.ts`
+
+## Desktop parallax scroll
+
+On desktop the timeline is rendered as a full-page horizontal parallax experience using **GSAP** and **Locomotive Scroll**.
+
+<CardGroup cols={2}>
+  <Card title="GSAP" icon="bolt">
+    Handles per-element scroll-linked transforms. Each timeline item's `y` offset is driven by its `speed` value, creating depth as the user scrolls.
+  </Card>
+  <Card title="Locomotive Scroll" icon="arrow-down">
+    Provides smooth inertia scrolling and exposes scroll progress values that GSAP reads. This combination creates the parallax depth effect.
+  </Card>
+</CardGroup>
+
+The `speed` field in each milestone entry controls how far and in which direction an image travels relative to the scroll position:
+
+- Positive `speed` (e.g. `3`): image moves downward relative to scroll, appearing to recede
+- Negative `speed` (e.g. `-3`): image moves upward relative to scroll, appearing to advance
+
+Alternating between `3` and `-3` across adjacent entries creates a staggered two-column visual rhythm.
+
+## Mobile swipe view
+
+On mobile devices the timeline renders through `components/organisms/MobileTimeline.tsx` as a vertically stacked list with scroll-triggered fade animations.
+
+<Tabs>
+  <Tab title="Animation">
+    An `IntersectionObserver` (threshold `0.2`) watches every `[data-timeline-item]` element. When an item enters the viewport its index is added to a `Set<number>` stored in `visibleItems` state.
+
+    Items not yet visible use `opacity-0 translate-y-8`; visible items transition to `opacity-100 translate-y-0` over 700ms.
+
+    ```typescript components/organisms/MobileTimeline.tsx
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = parseInt(
+              entry.target.getAttribute('data-index') || '0'
+            )
+            setVisibleItems((prev) => new Set(prev).add(index))
+          }
+        })
+      },
+      { threshold: 0.2 }
+    )
+    ```
+  </Tab>
+  <Tab title="Layout">
+    - Background: `bg-gradient-to-br from-orange-50 via-white to-red-50`
+    - Heading: "Our Journey" in `text-7xl` with an orange-to-red gradient clip
+    - Items spaced with `space-y-12`
+    - Closing tagline: "Let's continue making history" in matching gradient style
+    - Each item renders as a `TimelineGridTile` molecule with `variant="mobile"`
+  </Tab>
+</Tabs>
+
+<Tip>
+  Once an item animates in it stays visible — indices are only ever added to `visibleItems`, never removed. This prevents items from disappearing when the user scrolls back up.
+</Tip>
+
+## Adding a new milestone
+
+<AccordionGroup>
+  <Accordion title="Step-by-step: add a milestone">
+    1. Upload the archival photo to Cloudflare Images and note the image ID.
+    2. Open `lib/timeline-data.ts`.
+    3. Insert a new entry in the `timelineData` array in chronological order:
+
+    ```typescript
+    {
+      year: "2027",
+      title: "Your milestone title here",
+      description: "",
+      speed: 3,   // Use -3 if the previous entry used 3, to maintain the alternating pattern
+      image: getCloudflareImage("your-cloudflare-image-id")
+    }
+    ```
+
+    4. Verify the `speed` value alternates with the adjacent entries.
+    5. Save the file — no other changes are required. Both the desktop parallax and mobile views read from the same array.
+  </Accordion>
+  <Accordion title="Commented-out entries">
+    Several entries in `timelineData` are commented out (1987 alternate photo, 1995 alternate photo, 2007 first version). These are preserved as fallback images in case the active image needs to be replaced. Do not delete them.
+  </Accordion>
+  <Accordion title="Updating an existing photo">
+    Replace the `getCloudflareImage()` call in the relevant entry with the new image ID. The old image ID can be kept as a comment for reference. Cloudflare Images caches by URL, so the update takes effect immediately without a cache purge.
+  </Accordion>
+</AccordionGroup>

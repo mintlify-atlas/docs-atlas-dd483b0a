@@ -1,0 +1,148 @@
+---
+title: "Architecture overview"
+description: "How the NJ Rajat Mahotsav platform is structured: providers, routing, state management, and CDN integration."
+---
+
+The NJ Rajat Mahotsav platform is a production Next.js 15 application built for the Shree Swaminarayan Temple Secaucus 25th Anniversary celebration (July 29 – August 2, 2026). It handles event registration, admin workflows, media delivery, and community seva submissions.
+
+## Global provider tree
+
+The root layout (`app/layout.tsx`) wraps every page in three nested providers. They must be composed in this order because each layer depends on the one outside it:
+
+```tsx app/layout.tsx
+<LoadingProvider>
+  <AudioProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
+      <Navigation />
+      <main>{children}</main>
+      <StickyFooter />
+      <ScrollToTop />
+      <FloatingMenuButton />
+      <AudioPlayer />
+    </ThemeProvider>
+  </AudioProvider>
+</LoadingProvider>
+```
+
+| Provider | Source | Responsibility |
+|---|---|---|
+| `LoadingProvider` | `hooks/use-loading.tsx` | Global loading state shared across pages and route transitions |
+| `AudioProvider` | `contexts/audio-context.tsx` | Background prayer audio with play/pause, fade-in, fade-out, and user-consent gating |
+| `ThemeProvider` | `components/atoms/theme-provider` | Forced to light mode (`forcedTheme="light"`) — dark mode is disabled |
+
+Every page also receives the persistent `Navigation`, `StickyFooter`, `ScrollToTop`, `FloatingMenuButton`, and `AudioPlayer` components regardless of the current route.
+
+### Audio system
+
+The `AudioProvider` manages a single `HTMLAudioElement` that streams prayer audio from the Cloudflare R2 CDN. Key behaviors:
+
+- **User-consent gating** — the audio element is created with `volume = 0` and will not play until `grantConsent()` is called, satisfying browser autoplay policies.
+- **Fade controls** — `fadeOut(duration)` and `fadeToVolume(targetVolume, duration)` animate volume in 50-step intervals so transitions feel smooth.
+- **Persistent across routes** — audio continues playing as the user navigates between pages because the provider lives in the root layout.
+
+The context exposes: `play`, `pause`, `fadeOut`, `fadeToVolume`, `toggle`, `isPlaying`, `isLoaded`, `hasUserConsent`, and `grantConsent`.
+
+## Routing
+
+The platform uses the Next.js 15 App Router. All routes are defined under `app/`:
+
+| Route | Purpose |
+|---|---|
+| `/` | Main landing page — hero, countdown, media galleries, highlights |
+| `/registration` | Multi-step event registration form with Supabase backend |
+| `/schedule` | Interactive event timeline with mobile and desktop variants |
+| `/community-seva` | Community service submission form |
+| `/spiritual-seva` | Spiritual service submission form |
+| `/guest-services` | Guest services information page |
+| `/admin/registrations` | Protected admin dashboard — requires Google OAuth |
+| `/auth/callback` | Supabase OAuth callback handler — validates domain and redirects |
+
+### Middleware and session refresh
+
+`middleware.ts` intercepts every request (except static files and image assets) and calls `updateSession` from `utils/supabase/middleware` to keep the Supabase session cookie fresh:
+
+```ts middleware.ts
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+}
+```
+
+## State management
+
+The platform uses **React Context API** for global state and **custom hooks** for encapsulated local logic. There is no Redux or Zustand.
+
+| Hook | File | Purpose |
+|---|---|---|
+| `useAudioContext` | `contexts/audio-context.tsx` | Consume audio state and controls from `AudioProvider` |
+| `useLoading` | `hooks/use-loading.tsx` | Global loading state for page transitions |
+| `useAudio` | `hooks/use-audio.ts` | Low-level audio playback utilities |
+| `useDeviceType` | `hooks/use-device-type.ts` | Detect mobile vs. desktop for conditional rendering |
+| `useIntersectionObserver` | `hooks/use-intersection-observer.ts` | Scroll-based animation triggers |
+| `useToast` | `hooks/use-toast.ts` | Toast notification queue |
+
+Form state is managed locally with **React Hook Form** and validated with **Zod** schemas. Server data is read directly from Supabase in Server Components or via API routes — no additional caching layer.
+
+## Data flow
+
+```
+Browser
+  │
+  ├── Static assets ──────────────────► Cloudflare R2 CDN
+  │                                      https://cdn.njrajatmahotsav.com
+  │
+  ├── Optimized images ────────────────► Cloudflare Images
+  │                                      https://imagedelivery.net/...
+  │
+  ├── Form submissions (registration,
+  │   seva) ──────────────────────────► Supabase (PostgreSQL + RLS)
+  │
+  ├── Admin auth ──────────────────────► Supabase Auth (Google OAuth)
+  │                                        └── /auth/callback validates domain
+  │
+  └── File downloads ─────────────────► /api/download (URL-allowlisted proxy)
+                                         └── fetches from R2 via AWS SDK
+```
+
+## CDN architecture
+
+All assets are served from Cloudflare infrastructure.
+
+### Cloudflare R2 (static assets)
+
+Static files — audio, PDFs, and non-optimized images — are stored in R2 and served via a custom domain:
+
+```
+https://cdn.njrajatmahotsav.com/<path>
+```
+
+### Cloudflare Images (responsive images)
+
+Photos use Cloudflare Images for on-the-fly resizing and format conversion. Three named variants are defined:
+
+| Variant | Helper function | Use case |
+|---|---|---|
+| `bigger` | `getCloudflareImage(id)` | Standard responsive images |
+| `mobileWP` | `getCloudflareImageMobileWp(id)` | Mobile wallpaper / background images |
+| `biggest` | `getCloudflareImageBiggest(id)` | Full-resolution hero images |
+
+All helpers live in `lib/cdn-assets.ts` and return fully-qualified `imagedelivery.net` URLs.
+
+<Note>
+  Next.js image optimization is disabled (`images.unoptimized: true` in `next.config.mjs`) because Cloudflare Images handles all resizing and format conversion externally.
+</Note>
+
+## Security model
+
+Security is layered across multiple levels:
+
+- **HTTP headers** — `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`, and `Permissions-Policy` are set for every route via `next.config.mjs`.
+- **Row Level Security** — Supabase RLS policies restrict database access at the row level.
+- **Domain-restricted admin** — `lib/admin-auth.ts` enforces an `ALLOWED_DOMAIN` constant; any Google account outside that domain is rejected at `/auth/callback`.
+- **URL allowlisting** — the `/api/download` route validates URLs before proxying requests to R2.
+- **No hardcoded secrets** — all credentials are read from environment variables.
+
+<Warning>
+  Before deploying to production, configure Supabase RLS policies for your domain, update `ALLOWED_DOMAIN` in `lib/admin-auth.ts`, and add server-side rate limiting. See the README security section for a full checklist.
+</Warning>

@@ -1,0 +1,220 @@
+---
+title: "Atoms"
+description: "Smallest reusable primitives in the NJ Rajat Mahotsav component system."
+---
+
+Atoms are the building blocks of the UI — they have no dependencies on other project components and can be used anywhere. Import them from the atoms index:
+
+```typescript
+import { LoadingScreen, Typewriter, ScrollToTop, ThemeProvider, RegularLogo } from '@/components/atoms'
+```
+
+## Components
+
+### LoadingScreen
+
+**File:** `components/atoms/loading-screen.tsx`
+
+Full-screen splash gate that appears on first page load. It renders on top of everything (`z-index: 60`) using `AnimatePresence` from framer-motion and exits with a blur + scale + rotateY transition.
+
+The screen presents two `AudioChoiceButton` controls — "Audio" and "Silent" — allowing the user to grant or deny audio consent before entering the site. This is required by browser autoplay policy.
+
+Internally it uses:
+- `useLoading()` hook to read and clear the loading state
+- `useAudioContext()` to call `play()` and `grantConsent()` if the user opts into audio
+- `ShaderBackground` as the visual backdrop
+
+```typescript
+// No props — state is managed through context
+<LoadingScreen />
+```
+
+<Note>
+`LoadingScreen` reads loading state from `LoadingProvider` in `contexts/`. It is mounted in `app/layout.tsx` and should not be instantiated elsewhere.
+</Note>
+
+---
+
+### ThemeProvider
+
+**File:** `components/atoms/theme-provider.tsx`
+
+Thin wrapper around `next-themes` `ThemeProvider`. Passes all props through unchanged.
+
+```typescript
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>
+}
+```
+
+In `app/layout.tsx` the theme is forced to light mode:
+
+```typescript
+<ThemeProvider
+  attribute="class"
+  defaultTheme="light"
+  forcedTheme="light"
+  disableTransitionOnChange
+>
+  {children}
+</ThemeProvider>
+```
+
+<Note>
+Do not remove `forcedTheme="light"`. The site's colour palette and CSS variables are calibrated for light mode only.
+</Note>
+
+---
+
+### Typewriter
+
+**File:** `components/atoms/typewriter.tsx`
+
+Animates text character-by-character using `useState` + `useEffect` with a configurable per-character delay. Renders into an `<h1>` tag with a pulsing cursor (`|`).
+
+```typescript
+interface TypewriterProps {
+  text: string
+  speed?: number      // milliseconds per character, default 100
+  className?: string
+}
+```
+
+**Usage:**
+
+```typescript
+<Typewriter
+  text="Jay Shree Swaminarayan"
+  speed={80}
+  className="text-4xl font-bold text-white"
+/>
+```
+
+---
+
+### ScrollToTop
+
+**File:** `components/atoms/scroll-to-top.tsx`
+
+A floating `ArrowUp` button that appears after the user scrolls more than 300 px. It adapts its icon colour automatically by sampling the computed `backgroundColor` of the element directly beneath the button position, converting the RGB value to a luminance score to choose between light and dark variants.
+
+```typescript
+// No props — mounts as a fixed positioned element
+<ScrollToTop />
+```
+
+**Behaviour:**
+- Hidden until `window.scrollY > 300`
+- Uses `requestAnimationFrame` for scroll event throttling
+- Calls `document.documentElement.scrollTo({ top: 0, behavior: 'smooth' })`
+- Fixed position: `bottom-6 right-6 z-40`
+
+Rendered in `app/layout.tsx` globally alongside `FloatingMenuButton` and `AudioPlayer`.
+
+---
+
+### RegularLogo
+
+**File:** `components/atoms/regular_logo.tsx`
+
+Displays the main Rajat Mahotsav logo from the Cloudflare CDN. The image source is `CDN_ASSETS.mainLogo` from `lib/cdn-assets.ts`.
+
+```typescript
+// No props
+<RegularLogo />
+```
+
+The image is constrained to `max-w-[60vw] max-h-[45vh]` and centred within its container.
+
+---
+
+### Button
+
+**File:** `components/atoms/button.tsx`
+
+Extends the shadcn/ui Button with `class-variance-authority` (CVA). Supports an `asChild` prop via Radix `Slot` for composing with other elements.
+
+```typescript
+interface ButtonProps extends React.ComponentProps<"button">, VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+```
+
+**Variants:**
+
+<Tabs>
+  <Tab title="variant">
+    | Value | Description |
+    |---|---|
+    | `default` | Primary filled button |
+    | `destructive` | Red destructive action |
+    | `outline` | Bordered with transparent background |
+    | `secondary` | Muted secondary style |
+    | `ghost` | No background, hover only |
+    | `link` | Underline text style |
+  </Tab>
+  <Tab title="size">
+    | Value | Height |
+    |---|---|
+    | `default` | `h-9` |
+    | `sm` | `h-8` |
+    | `lg` | `h-10` |
+    | `icon` | `size-9` (square) |
+  </Tab>
+</Tabs>
+
+```typescript
+<Button variant="outline" size="lg">
+  Register Now
+</Button>
+
+// Render as a link
+<Button asChild>
+  <a href="/registration">Register Now</a>
+</Button>
+```
+
+---
+
+### Other primitives
+
+The following atoms wrap Radix UI or shadcn/ui primitives with project-specific styling. They are used internally by molecules and organisms.
+
+<AccordionGroup>
+  <Accordion title="Input — components/atoms/input.tsx">
+    Standard text input. Styled for the registration theme with `reg-input` CSS class support.
+  </Accordion>
+  <Accordion title="Label — components/atoms/label.tsx">
+    Radix UI label wrapper. Used in all form molecules and organisms.
+  </Accordion>
+  <Accordion title="Checkbox — components/atoms/checkbox.tsx">
+    Radix UI checkbox. Used in `SevaSubmissionForm` for seva type selection.
+  </Accordion>
+  <Accordion title="Select — components/atoms/select.tsx">
+    Radix UI select (trigger + content + item). Used in forms for country and mandal dropdowns.
+  </Accordion>
+  <Accordion title="Popover — components/atoms/popover.tsx">
+    Radix UI popover. Used by `PhoneInput` for the country selector dropdown.
+  </Accordion>
+  <Accordion title="ScrollArea — components/atoms/scroll-area.tsx">
+    Radix UI scroll area. Used in phone input's country list.
+  </Accordion>
+  <Accordion title="Textarea — components/atoms/textarea.tsx">
+    Styled textarea input for multi-line text fields.
+  </Accordion>
+  <Accordion title="Card — components/atoms/card.tsx">
+    shadcn/ui card with `CardHeader`, `CardContent`, `CardTitle`, `CardDescription` sub-components. Used by `SevaSubmissionForm`.
+  </Accordion>
+  <Accordion title="TagBadge — components/atoms/tag-badge.tsx">
+    Small label badge for categorisation.
+  </Accordion>
+  <Accordion title="FloatingButton — components/atoms/floating-button.tsx">
+    Base floating action button used by `ScrollToTop`, `FloatingMenuButton`, and `AudioPlayer`.
+  </Accordion>
+  <Accordion title="AudioChoiceButton — components/atoms/audio-choice-button.tsx">
+    Specialised button rendered inside `LoadingScreen` for audio consent.
+  </Accordion>
+  <Accordion title="Toast — components/atoms/toast.tsx">
+    Toast notification primitive used via `useToast()` hook.
+  </Accordion>
+</AccordionGroup>

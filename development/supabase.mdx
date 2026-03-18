@@ -1,0 +1,297 @@
+---
+title: "Supabase"
+description: "Supabase integration for authentication, session management, and registration data storage."
+---
+
+The platform uses [Supabase](https://supabase.com) as its backend-as-a-service. It provides the PostgreSQL database (storing event registrations), Row Level Security, and Google OAuth for the admin dashboard.
+
+## Environment variables
+
+Add these to your `.env.local` file:
+
+```bash .env.local
+NEXT_PUBLIC_SUPABASE_URL=https://efwvxiqyyunbyouemrhe.supabase.co
+# Use one of the following key variables:
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+# or (legacy name, still supported)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+```
+
+<Warning>
+  Both `NEXT_PUBLIC_SUPABASE_URL` and a key variable are required. The server client throws at runtime if either is missing. If you use a git worktree, the `.env.local` file must exist in the worktree root where you run `npm run dev` — not only in the main repo root. Restart the dev server after any changes.
+</Warning>
+
+## Client factory
+
+The codebase provides two client factories — one for the browser and one for the server. Import the appropriate one for each context.
+
+<Tabs>
+  <Tab title="Browser (client components)">
+    `utils/supabase/client.ts` exports a pre-built singleton using `createBrowserClient` from `@supabase/ssr`. It reads cookies automatically for SSR-compatible auth.
+
+    ```typescript utils/supabase/client.ts
+    import { createBrowserClient } from "@supabase/ssr"
+
+    const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    const hasSupabaseKey = Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
+
+    export const hasSupabaseClientEnv = hasSupabaseUrl && hasSupabaseKey
+
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co"
+    const supabaseKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+      "placeholder-key-for-build"
+
+    /** Browser Supabase client; uses cookies for auth (SSR-compatible). */
+    export const supabase = createBrowserClient(supabaseUrl, supabaseKey)
+    ```
+
+    The `hasSupabaseClientEnv` export lets components render gracefully when env vars are absent (e.g., during CI builds).
+
+    ```typescript Usage in a client component
+    import { supabase } from "@/utils/supabase/client"
+
+    const { data, error } = await supabase
+      .from("registrations")
+      .insert([registrationPayload])
+    ```
+  </Tab>
+
+  <Tab title="Server (Server Components / Route Handlers)">
+    `utils/supabase/server.ts` exports an async `createClient()` factory. It reads and writes cookies from the Next.js `cookies()` store, keeping the session in sync across requests.
+
+    ```typescript utils/supabase/server.ts
+    import { createServerClient } from "@supabase/ssr"
+    import { cookies } from "next/headers"
+
+    export async function createClient() {
+      const cookieStore = await cookies()
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey =
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseKey) {
+        const missing = [
+          !supabaseUrl && "NEXT_PUBLIC_SUPABASE_URL",
+          !supabaseKey && "NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        ]
+          .filter(Boolean)
+          .join(", ")
+        throw new Error(`Missing Supabase env: ${missing}`)
+      }
+
+      return createServerClient(supabaseUrl, supabaseKey, {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // setAll called from Server Component; middleware handles refresh
+            }
+          },
+        },
+      })
+    }
+    ```
+
+    ```typescript Usage in a Route Handler
+    import { createClient } from "@/utils/supabase/server"
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    ```
+  </Tab>
+</Tabs>
+
+## Middleware session refresh
+
+`utils/supabase/middleware.ts` exports `updateSession`, which refreshes the Supabase auth token on every request before any server code reads the session. It is called from the root `middleware.ts`.
+
+```typescript utils/supabase/middleware.ts
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
+
+export async function updateSession(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    return supabaseResponse
+  }
+
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        )
+        supabaseResponse = NextResponse.next({ request })
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        )
+      },
+    },
+  })
+
+  await supabase.auth.getClaims()
+
+  if (
+    request.nextUrl.pathname.startsWith("/admin") ||
+    request.nextUrl.pathname === "/api/registrations/export"
+  ) {
+    supabaseResponse.headers.set("Cache-Control", "no-store, max-age=0")
+  }
+
+  return supabaseResponse
+}
+```
+
+<Note>
+  Admin routes (`/admin/**`) and the registrations export endpoint have `Cache-Control: no-store` forced in the middleware response to prevent stale session data from being served by CDN or browser caches.
+</Note>
+
+## Database tables
+
+### `registrations`
+
+The primary table. Rows are inserted by the public registration form and read by the admin dashboard.
+
+| Column | Notes |
+|---|---|
+| `id` | Auto-incrementing primary key |
+| `ghaam` | Attendee's ghaam (regional group) |
+| `mandal` | Attendee's mandal |
+| `arrival_date` | Date of arrival |
+
+Composite indexes support filtered keyset pagination used by the admin dashboard:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_registrations_ghaam_id
+  ON public.registrations (ghaam, id)
+  WHERE ghaam IS NOT NULL AND trim(ghaam) != '';
+
+CREATE INDEX IF NOT EXISTS idx_registrations_mandal_id
+  ON public.registrations (mandal, id)
+  WHERE mandal IS NOT NULL AND trim(mandal) != '';
+
+CREATE INDEX IF NOT EXISTS idx_registrations_arrival_id
+  ON public.registrations (arrival_date, id)
+  WHERE arrival_date IS NOT NULL;
+```
+
+## Row Level Security
+
+RLS is enabled on `public.registrations`. The policies are:
+
+<AccordionGroup>
+  <Accordion title="INSERT — allow anonymous inserts">
+    The public registration form runs as the `anon` role. This policy allows any unauthenticated user to insert a row, enabling public event sign-ups.
+  </Accordion>
+
+  <Accordion title="SELECT — admin domain only">
+    Only authenticated users with an `@nj.sgadi.us` email address can read registration data. The auth function is wrapped in a sub-select to avoid per-row evaluation:
+
+    ```sql
+    CREATE POLICY "admin_domain_select"
+      ON public.registrations
+      FOR SELECT
+      TO authenticated
+      USING (
+        (select auth.email())::text ilike '%@nj.sgadi.us'
+      );
+    ```
+  </Accordion>
+
+  <Accordion title="UPDATE — allow anonymous updates">
+    An `anon can update` policy permits public updates (used for multi-step registration flows).
+  </Accordion>
+
+  <Accordion title="SELECT — daily cron keep-alive">
+    A `daily-cron-job-read` policy permits the keep-alive cron role to query the table, preventing cold-start timeouts.
+  </Accordion>
+</AccordionGroup>
+
+## Google OAuth for the admin dashboard
+
+The admin dashboard at `/admin/registrations` uses Google OAuth via Supabase. Only accounts with an `@nj.sgadi.us` email pass the RLS check after sign-in.
+
+<Steps>
+  <Step title="Enable Google provider in Supabase">
+    Open your project in the [Supabase Dashboard](https://app.supabase.com), go to **Authentication → Providers**, find **Google**, and enable it. You will enter the Client ID and Client Secret in a later step.
+  </Step>
+
+  <Step title="Create OAuth credentials in Google Cloud Console">
+    1. Go to [Google Cloud Console](https://console.cloud.google.com/) and open or create a project.
+    2. Navigate to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+    3. Choose **Web application**.
+    4. Add these **Authorized JavaScript origins**:
+       - `http://localhost:3000`
+       - `https://njrajatmahotsav.com`
+    5. Add these **Authorized redirect URIs**:
+       - `https://efwvxiqyyunbyouemrhe.supabase.co/auth/v1/callback`
+       - `http://localhost:3000/auth/callback`
+       - `https://njrajatmahotsav.com/auth/callback`
+    6. Copy the **Client ID** and **Client Secret**.
+  </Step>
+
+  <Step title="Paste credentials into Supabase">
+    Return to **Authentication → Providers → Google** in the Supabase Dashboard and enter the Client ID and Client Secret you just copied. Save.
+  </Step>
+
+  <Step title="Configure redirect URL allow list">
+    In Supabase, go to **Authentication → URL Configuration** and add the following to **Redirect URLs**:
+    - `http://localhost:3000/auth/callback`
+    - `https://njrajatmahotsav.com/auth/callback`
+
+    Set the **Site URL** to `https://njrajatmahotsav.com` (or `http://localhost:3000` for local testing).
+  </Step>
+
+  <Step title="Verify the flow">
+    1. Run `npm run dev` and navigate to `/admin/registrations`.
+    2. Click **Sign in with Google** and complete the consent screen.
+    3. You should be redirected to `/auth/callback` and then to the admin dashboard.
+    4. In DevTools → **Application → Cookies**, confirm `sb-*-auth-token` cookies are set.
+  </Step>
+</Steps>
+
+### Auth callback route
+
+After Google redirects back, Supabase exchanges the OAuth code for a session via the `/auth/callback` route in the Next.js app. The route must be registered in both Google Cloud Console and the Supabase redirect allow list.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title='"Supabase is not configured" / env vars not loading'>
+    If you are using a git worktree, `.env.local` must exist in the worktree root (where `npm run dev` is run), not only in the main repo. Restart the dev server after creating or changing `.env.local`.
+  </Accordion>
+
+  <Accordion title='"redirect_uri_mismatch" error from Google'>
+    The exact callback URL must be present in both the Google Cloud Console authorized redirect URIs and the Supabase redirect allow list. Check for trailing slashes or `http` vs `https` mismatches.
+  </Accordion>
+
+  <Accordion title="Session not persisting after sign-in">
+    Verify that `updateSession` is being called in `middleware.ts` and that the middleware matcher includes the `/auth/callback` path. Also check that cookies are not being blocked by browser settings.
+  </Accordion>
+
+  <Accordion title='"Invalid OAuth client" error'>
+    The Client ID and Client Secret entered in Supabase must exactly match the values shown in Google Cloud Console for the same OAuth credential.
+  </Accordion>
+</AccordionGroup>

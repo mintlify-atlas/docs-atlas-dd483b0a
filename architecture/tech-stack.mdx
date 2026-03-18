@@ -1,0 +1,157 @@
+---
+title: "Tech stack"
+description: "Every dependency used by the NJ Rajat Mahotsav platform, with versions and the rationale for each technology choice."
+---
+
+All versions below are taken from `package.json`. Ranges (e.g. `^15.5.7`) indicate the minimum installed version; the lockfile pins the exact resolved version.
+
+## Core framework
+
+| Package | Version | Purpose |
+|---|---|---|
+| `next` | `^15.5.7` | React framework providing App Router, Server Components, API routes, and built-in optimizations |
+| `react` | `^18.2.0` | UI library — concurrent rendering, Suspense, and hooks |
+| `react-dom` | `^18.2.0` | DOM renderer for React |
+| `typescript` | `^5` | Static typing across the entire codebase |
+| `tailwindcss` | `^4.1.9` | Utility-first CSS with the v4 engine (PostCSS-based, no config file required for core) |
+
+**Why Next.js 15?** The App Router enables per-route Server Components, which keep Supabase credentials server-side and reduce client bundle size. Streaming SSR speeds up the initial page load for the media-heavy landing page.
+
+**Why Tailwind CSS v4?** The v4 engine drops the `tailwind.config.js` class-scanning requirement in favor of CSS-first configuration, reducing build complexity. Custom design tokens (navy palette, spacing variables, font variables) are defined directly in CSS.
+
+## UI components
+
+| Package | Version | Purpose |
+|---|---|---|
+| `shadcn/ui` (via `components.json`) | New York style | Accessible, unstyled-first component library built on Radix UI primitives |
+| `@radix-ui/react-*` | 1.x – 2.x | Headless, accessible primitives (accordion, dialog, popover, select, tooltip, and more) |
+| `framer-motion` | `^12.23.25` | Declarative animation library used for page transitions and scroll-triggered reveals |
+| `motion` | `^12.23.24` | Framer Motion's standalone motion package (used alongside `framer-motion`) |
+| `gsap` | `^3.13.0` | Timeline-based animation for complex, sequenced effects |
+| `locomotive-scroll` | `^4.1.4` | Smooth scroll with inertia and scroll-triggered callbacks |
+| `@paper-design/shaders-react` | `latest` | WebGL shader effects used for the decorative paper-grain backgrounds |
+| `lucide-react` | `^0.454.0` | Icon library — 1 000+ consistent SVG icons as React components |
+| `react-icons` | `^5.5.0` | Additional icon sets not available in Lucide |
+| `geist` | `latest` | Vercel's Geist font (supplementary to the Google Fonts loaded in `layout.tsx`) |
+
+**Why Framer Motion + GSAP?** Framer Motion handles component-level declarative animations (entry/exit, layout). GSAP handles complex, sequenced, timeline-based animations where fine-grained control over easing and staggering is required. The two libraries complement each other.
+
+**Why shadcn/ui?** Components are copied into the codebase (`components/ui/`) rather than installed as a black-box package, so they can be customized freely without fighting an upstream API.
+
+## Forms and validation
+
+| Package | Version | Purpose |
+|---|---|---|
+| `react-hook-form` | `^7.60.0` | Performant form state management with minimal re-renders |
+| `@hookform/resolvers` | `^3.10.0` | Adapter connecting React Hook Form to Zod schemas |
+| `zod` | `3.25.67` | Schema declaration and runtime validation for form data |
+| `react-phone-number-input` | `^3.4.12` | International phone number input with country flag selector |
+| `react-day-picker` | `^9.10.0` | Accessible date and date-range picker |
+| `date-fns` | `^4.1.0` | Date formatting and arithmetic utilities used with react-day-picker |
+| `chrono-node` | `^2.8.4` | Natural language date parsing (e.g. "next Sunday" → `Date`) |
+| `@internationalized/date` | `^3.9.0` | Timezone-aware date primitives from React Aria |
+| `react-aria-components` | `^1.12.2` | Accessible React Aria component wrappers |
+| `react-dropzone` | `^14.3.8` | Drag-and-drop file upload for seva submission forms |
+| `input-otp` | `1.4.1` | One-time password input component |
+
+**Why React Hook Form + Zod?** React Hook Form avoids controlled-input overhead — the registration form has many fields and must stay responsive. Zod schemas serve as the single source of truth for both client-side validation and TypeScript type inference.
+
+## Backend and storage
+
+| Package | Version | Purpose |
+|---|---|---|
+| `@supabase/supabase-js` | `^2.57.4` | Supabase JavaScript client — database queries, realtime, and auth |
+| `@supabase/ssr` | `^0.8.0` | SSR-compatible Supabase client for Server Components and middleware |
+| `@aws-sdk/client-s3` | `^3.922.0` | AWS S3-compatible client used to interact with Cloudflare R2 |
+| `@aws-sdk/s3-request-presigner` | `^3.922.0` | Generates pre-signed URLs for temporary R2 access |
+
+**Why Supabase?** Supabase provides a managed PostgreSQL database, Row Level Security, and Google OAuth out of the box — eliminating the need to build an auth system or manage a database server. The `@supabase/ssr` package handles cookie-based session management in Next.js Server Components.
+
+**Why Cloudflare R2?** R2 is S3-compatible (enabling the AWS SDK) but has no egress fees, which matters for a media-heavy event site serving audio and large images. Cloudflare Images sits in front for responsive delivery.
+
+## Data visualization
+
+| Package | Version | Purpose |
+|---|---|---|
+| `recharts` | `2.15.4` | Chart library used in the admin dashboard for arrival-by-date and Mandal breakdown visualizations |
+
+## Media and interactivity
+
+| Package | Version | Purpose |
+|---|---|---|
+| `embla-carousel-react` | `^8.5.1` | Touch-friendly, accessible carousel for photo galleries |
+| `embla-carousel-autoplay` | `^8.6.0` | Autoplay plugin for Embla Carousel |
+| `swiper` | `^12.0.2` | Alternative carousel used in specific gallery sections |
+| `media-chrome` | `^4.14.0` | Web components for custom HTML5 video player controls |
+| `canvas-confetti` | `^1.9.3` | Canvas-based confetti animation shown on registration success |
+| `pdfjs-dist` | `^3.11.174` | PDF rendering for in-browser document previews |
+
+## Notifications and UX utilities
+
+| Package | Version | Purpose |
+|---|---|---|
+| `sonner` | `^1.7.4` | Toast notification system — wraps the Sonner library |
+| `cmdk` | `^1.0.4` | Command palette component |
+| `vaul` | `^0.9.9` | Drawer component for mobile bottom sheets |
+| `react-resizable-panels` | `^2.1.7` | Resizable split-panel layouts used in the admin dashboard |
+
+## Styling utilities
+
+| Package | Version | Purpose |
+|---|---|---|
+| `clsx` | `^2.1.1` | Conditional class name joining |
+| `tailwind-merge` | `^2.5.5` | Merges Tailwind classes without specificity conflicts |
+| `class-variance-authority` | `^0.7.1` | Variant-based component API (used by shadcn/ui) |
+| `tailwindcss-animate` | `^1.0.7` | Tailwind plugin for CSS animation utilities |
+| `tw-animate-css` | `1.3.3` | Additional animate.css-compatible Tailwind animations |
+| `@emotion/is-prop-valid` | `latest` | Framer Motion peer dependency for prop filtering |
+
+## Analytics and performance
+
+| Package | Version | Purpose |
+|---|---|---|
+| `@vercel/analytics` | `1.3.1` | Page view and event analytics via Vercel |
+| `@vercel/speed-insights` | `^1.3.1` | Real User Monitoring (RUM) for Core Web Vitals |
+
+## Build tooling (dev dependencies)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `typescript` | `^5` | TypeScript compiler |
+| `@types/node` | `^22` | Node.js type definitions |
+| `@types/react` | `^18.2.0` | React type definitions |
+| `@types/react-dom` | `^18.2.0` | ReactDOM type definitions |
+| `@tailwindcss/postcss` | `^4.1.9` | PostCSS plugin for Tailwind CSS v4 |
+| `postcss` | `^8.5` | CSS transformation pipeline |
+
+## Notable build configuration
+
+Several defaults are overridden in `next.config.mjs` to suit the platform's needs:
+
+```js next.config.mjs
+const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,       // ESLint runs separately in CI
+  },
+  typescript: {
+    ignoreBuildErrors: true,         // Type errors don't block production builds
+  },
+  images: {
+    unoptimized: true,               // Cloudflare Images handles all optimization
+  },
+  experimental: {
+    optimizePackageImports: ['framer-motion'],  // Tree-shake animation library
+  },
+}
+```
+
+The webpack configuration also disables the `canvas` module (a `pdfjs-dist` peer dependency) for environments where it is unavailable:
+
+```js next.config.mjs (webpack)
+config.resolve.fallback.canvas = false
+config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^canvas$/ }))
+```
+
+<Note>
+  `typescript.ignoreBuildErrors: true` means type errors will not fail CI unless you run `tsc --noEmit` separately. Add a dedicated type-check step to your pipeline if type safety in production builds is required.
+</Note>

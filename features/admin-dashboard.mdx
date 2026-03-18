@@ -1,0 +1,220 @@
+---
+title: "Admin dashboard"
+description: "Dashboard statistics, charts, registrations table, filters, search, CSV export, and API reference for the admin portal."
+---
+
+Once authenticated, the admin dashboard at `/admin/registrations` renders live event data sourced from Supabase. This page documents each section of the dashboard and the underlying API.
+
+## Summary statistics
+
+The four animated stat cards at the top of the dashboard are computed from the `get_registrations_stats` RPC response:
+
+<CardGroup cols={2}>
+  <Card title="Total registrations" icon="users">
+    The raw count of all rows in the `registrations` table within the event date range, returned as `total_registrations` from the stats RPC.
+  </Card>
+  <Card title="Peak daily attendance" icon="trending-up">
+    The highest single-day value in `daily_expected_attendance` — computed client-side with `Math.max(...Object.values(stats.daily_expected_attendance))`.
+  </Card>
+  <Card title="Avg daily arrivals" icon="calendar">
+    The mean of all values in `counts_by_arrival_date`, rounded to the nearest integer. Calculated as `total / values.length` across all arrival dates.
+  </Card>
+  <Card title="Unique ghaams" icon="map-pin">
+    The number of distinct Ghaam keys in `counts_by_ghaam`, derived from `Object.keys(stats.counts_by_ghaam).length`.
+  </Card>
+</CardGroup>
+
+Cards animate their count from 0 to the final value when they enter the viewport, using Framer Motion's `useMotionValue` and `animate`.
+
+## Charts
+
+Charts are loaded lazily via `React.lazy` and `Suspense`. A skeleton placeholder is shown while they load. All charts use Recharts.
+
+### Daily expected attendance
+
+A full-width line chart plotting `daily_expected_attendance` over time. Core event dates (July 27 – August 2, 2026) are highlighted with a shaded `ReferenceArea`. Dates are formatted as `M/d` on the X axis.
+
+```typescript
+// Data shape fed to the line chart
+type DailyAttendancePoint = {
+  date: string       // ISO date key, e.g. "2026-07-29"
+  attendance: number // expected attendee count
+  label: string      // formatted X-axis label, e.g. "7/29"
+}
+```
+
+### Arrivals by date
+
+A bar chart of registrant arrival dates from `counts_by_arrival_date`. Bars are sorted chronologically, and core event dates are shaded. X-axis labels are rotated –35° to accommodate dense date ranges.
+
+### Departures by date
+
+A bar chart mirroring the arrivals chart, using `counts_by_departure_date`. Shares the same visual style and core-date shading logic.
+
+### Highest attendees by Ghaam
+
+A ranked table showing the top 8 Ghaams by registrant count from `counts_by_ghaam`. "Unknown" values are excluded. If there are more than 8 Ghaams, a "View all" button opens a scrollable dialog listing all Ghaams sorted by count.
+
+### Highest attendees by Mandal
+
+The same ranked-table pattern for `counts_by_mandal`. Mandal names are converted from their stored format to display labels via `mandalStoredToDisplay()` before rendering.
+
+<Note>
+The charts section renders client-side only. If JavaScript is disabled or the bundle fails to load, the Suspense fallback skeleton remains visible.
+</Note>
+
+## Registrations table
+
+The table does not load automatically — it requires clicking the **Load Registrations** button. This avoids running an expensive query before the admin needs it.
+
+Table columns:
+
+| Column | Source field |
+|---|---|
+| # | Row number (1-based, tracks across pages) |
+| Name | `first_name` + `middle_name` + `last_name` |
+| Email | `email` |
+| Ghaam | `ghaam` |
+| Mandal | `mandal` (display label via `mandalStoredToDisplay`) |
+| Arrival | `arrival_date` (formatted as `MMM d, yyyy`) |
+| Departure | `departure_date` (formatted as `MMM d, yyyy`) |
+| Age | `age` |
+
+### Search
+
+The search box queries `name`, `email`, and `mobile_number` fields simultaneously. Search terms shorter than 2 characters are ignored. Input is debounced by 350 ms before triggering a new fetch.
+
+### Filters
+
+<CardGroup cols={2}>
+  <Card title="Ghaam" icon="filter">
+    Dropdown populated from the `GET /api/admin/registrations/distinct` endpoint. Shows all distinct Ghaam values present in the database.
+  </Card>
+  <Card title="Mandal" icon="filter">
+    Dropdown populated from the static `getAllMandalOptionsStored()` helper. Labels are converted for display via `mandalStoredToDisplay()`.
+  </Card>
+  <Card title="Country" icon="globe">
+    Dropdown populated from `GET /api/admin/registrations/distinct`. Shows all distinct country values.
+  </Card>
+  <Card title="Age filters" icon="hash">
+    Three numeric inputs: exact age, age minimum, and age maximum. Exposed behind the "Show age & date filters" toggle. `age_min` must be ≤ `age_max`.
+  </Card>
+  <Card title="Arrival date range" icon="calendar">
+    `Arrival from` and `Arrival to` date pickers, constrained to the event date range from `REGISTRATION_DATE_RANGE`.
+  </Card>
+  <Card title="Departure date range" icon="calendar">
+    `Departure from` and `Departure to` date pickers, using the same event date range constraints.
+  </Card>
+</CardGroup>
+
+When any filter is active, a **Clear filters** button and an **Export current view** button appear inline with the filter row.
+
+### Pagination
+
+The table uses keyset (cursor-based) pagination ordered by `id DESC`. Page size options are 25, 50, or 100 rows. The footer shows the current row range and the total row count.
+
+- Navigating **forward** uses `nextCursor` from the previous response.
+- Navigating **backward** uses `prevCursor`.
+- Changing page size resets to the first page.
+- Changing any filter resets to the first page and fires a new count request.
+
+<Note>
+The total row count is fetched from `GET /api/admin/registrations/count` when filters change. When no filters are active, the count from the stats RPC (`total_registrations`) is used instead to avoid a redundant query.
+</Note>
+
+### CSV export
+
+Two export actions are available:
+
+| Button | Endpoint | Behavior |
+|---|---|---|
+| Export entire registration list | `GET /api/registrations/export` | Exports all rows regardless of current filters |
+| Export current view | `GET /api/admin/registrations/export?{filters}` | Exports only rows matching the current filter state |
+
+Both endpoints stream rows in chunks of 500 using the `get_registrations_filtered` RPC in a `while (hasMore)` loop. The file is delivered as `text/csv; charset=utf-8` with a UTF-8 BOM (`\uFEFF`) for Excel compatibility.
+
+Exported columns (in order):
+
+```
+id, first_name, middle_name, last_name, email, mobile_number,
+phone_country_code, country, ghaam, mandal, arrival_date, departure_date, age
+```
+
+Filenames use the pattern `registrations-{ISO-timestamp}.csv` or `registrations-filtered-{ISO-timestamp}.csv`.
+
+## API reference
+
+### GET /api/admin/registrations
+
+Returns a single page of registrations with keyset pagination.
+
+**Authentication:** Requires an active Supabase session with an `@nj.sgadi.us` email. Returns `401` if unauthenticated, `403` if the email domain is not allowed.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `page_size` | `25 \| 50 \| 100` | Number of rows per page (default: `25`) |
+| `cursor` | integer | ID cursor for keyset pagination |
+| `direction` | `next \| prev` | Pagination direction (default: `next`) |
+| `search` | string | Full-text search across name, email, phone (min 2 chars) |
+| `ghaam` | string | Exact Ghaam filter |
+| `mandal` | string | Exact Mandal filter (stored value) |
+| `country` | string | Exact country filter |
+| `age` | integer | Exact age filter |
+| `age_min` | integer | Minimum age (inclusive) |
+| `age_max` | integer | Maximum age (inclusive) |
+| `arrival_from` | ISO date | Earliest arrival date (inclusive) |
+| `arrival_to` | ISO date | Latest arrival date (inclusive) |
+| `departure_from` | ISO date | Earliest departure date (inclusive) |
+| `departure_to` | ISO date | Latest departure date (inclusive) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "rows": [ /* RegistrationRow[] */ ],
+  "pageSize": 25,
+  "nextCursor": 1234,
+  "prevCursor": 5678,
+  "hasMore": true,
+  "hasPrev": false
+}
+```
+
+**Errors:**
+
+| Status | Meaning |
+|---|---|
+| `400` | `age_min` > `age_max` |
+| `401` | No active session |
+| `403` | Email not in `@nj.sgadi.us` domain |
+| `500` | Supabase not configured or RPC error |
+
+### GET /api/admin/registrations/count
+
+Returns the total number of rows matching the given filters. Accepts the same filter parameters as the main endpoint (no pagination params). Times out after 12 seconds and caps at 100,000 to prevent runaway queries.
+
+```json
+{ "count": 3421 }
+```
+
+### GET /api/admin/registrations/export
+
+Streams all matching rows as a CSV file. Accepts the same filter parameters as the main endpoint. No pagination parameters — all rows are exported in chunks of 500.
+
+### GET /api/admin/registrations/distinct
+
+Returns distinct values for `ghaam` and `country` columns, used to populate the filter dropdowns.
+
+```json
+{
+  "ghaam": ["Ahmedabad", "Surat", "Vadodara"],
+  "country": ["USA", "Canada", "UK"]
+}
+```
+
+<Tip>
+All admin API routes set `Cache-Control: no-store, max-age=0` on their responses. This is enforced both in the route handlers and in the Next.js middleware for all `/admin` paths.
+</Tip>

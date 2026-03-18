@@ -1,0 +1,170 @@
+---
+title: "Event Schedule"
+description: "The 7-day Rajat Mahotsav schedule (July 27 – August 2, 2026) with interactive day navigation for desktop and an accordion view for mobile."
+---
+
+The schedule page at `/schedule` presents the full 7-day program for the Rajat Mahotsav celebration. It renders a calendar grid on desktop and a collapsible accordion on mobile, both powered by the same `scheduleData` array defined in `app/schedule/page.tsx`.
+
+## Event dates
+
+The celebration runs from **Monday July 27 through Sunday August 2, 2026** at Shree Swaminarayan Temple Secaucus, New Jersey.
+
+<CardGroup cols={2}>
+  <Card title="July 27 — Monday" icon="calendar">
+    Welcome Program · All Parayan Mahapooja · Opening Ceremony
+  </Card>
+  <Card title="July 28 — Tuesday" icon="calendar">
+    Gnan Sathe Gamat · Shakotsav
+  </Card>
+  <Card title="July 29 — Wednesday" icon="calendar">
+    Gurupoonam · Bhakti Sandhya
+  </Card>
+  <Card title="July 30 — Thursday" icon="calendar">
+    Ladies Program · Samuh Raas
+  </Card>
+  <Card title="July 31 — Friday" icon="calendar">
+    Hindola Program · Bhakti Nrutya
+  </Card>
+  <Card title="August 1 — Saturday" icon="calendar">
+    Nagaryatra · Abhishek Program · Sanskrutik Drama
+  </Card>
+  <Card title="August 2 — Sunday" icon="calendar">
+    Patotsav Celebrations
+  </Card>
+</CardGroup>
+
+<Note>
+  Lunch and dinner are included each day but are excluded from the event count badge shown on each calendar tile.
+</Note>
+
+## Schedule data structure
+
+Each day is represented as a `ScheduleDay` object. Events within each day use the `Event` interface.
+
+```typescript app/schedule/page.tsx
+interface Event {
+  time: string        // "Morning" | "Afternoon" | "Evening"
+  title: string
+  description?: string
+  location?: string
+}
+
+interface ScheduleDay {
+  date: string        // Day number as string, e.g. "27"
+  dayName: string     // Full weekday name
+  month: string       // "July" or "August"
+  events: Event[]
+  isHighlight?: boolean
+}
+```
+
+The full `scheduleData` array is defined inline in `app/schedule/page.tsx:23`.
+
+## Desktop calendar view
+
+On viewports wider than `768px` the page renders a 7-column calendar grid. Clicking a day tile selects it and animates an event details panel below.
+
+<Tabs>
+  <Tab title="Tile behavior">
+    Each calendar tile shows:
+    - **Month** label in the top-left corner
+    - **Event count badge** (meals excluded) in the top-right corner
+    - **Date number** in large type at center
+    - **3-letter weekday abbreviation** below the date
+    - A bottom border indicator that slides with Framer Motion `layoutId="selectedIndicator"` when selected
+
+    The active tile scales up (`scale-105`) and gains an `ring-2 ring-orange-200` outline. Other tiles scale up on hover (`whileHover={{ y: -4 }}`).
+  </Tab>
+  <Tab title="Event details panel">
+    Below the tile grid, an `AnimatePresence` panel fades and slides in when the selected day changes (`mode="wait"`).
+
+    The panel contains:
+    - Day header with the date, weekday name, and total event count
+    - A scrollable list of events, each with a time badge and title
+    - Optional `description` and `location` fields rendered when present
+
+    ```typescript
+    // Event count excludes meals
+    const getEventCountExcludingMeals = (events: Event[]) =>
+      events.filter((event) => {
+        const normalizedTitle = event.title.trim().toLowerCase()
+        return normalizedTitle !== "lunch" && normalizedTitle !== "dinner"
+      }).length
+    ```
+  </Tab>
+</Tabs>
+
+## Mobile accordion view
+
+Below `768px` the page switches to a stacked accordion. Each day renders as a card with a tappable header.
+
+<Tabs>
+  <Tab title="Mobile layout">
+    - A **date circle** shows the day number and month abbreviation
+    - The **weekday name** and **event count** appear beside the circle
+    - A **chevron** icon rotates 90° when the day is expanded (`animate={{ rotate: selectedDay === index ? 90 : 0 }}`)
+    - Tapping an already-open day collapses it (`setSelectedDay(selectedDay === index ? -1 : index)`)
+
+    Expanded events animate in with staggered `x: -10 → 0` transitions.
+  </Tab>
+  <Tab title="Breakpoint detection">
+    The page detects mobile using a `resize` event listener rather than a CSS media query, so the correct component mounts server-side on initial load:
+
+    ```typescript
+    useEffect(() => {
+      const checkMobile = () => setIsMobile(window.innerWidth < 768)
+      checkMobile()
+      window.addEventListener('resize', checkMobile)
+      return () => window.removeEventListener('resize', checkMobile)
+    }, [])
+    ```
+  </Tab>
+</Tabs>
+
+## MobileTimeline component
+
+`components/organisms/MobileTimeline.tsx` is a separate full-page view that presents the historical timeline (1970–2026), not the event schedule. It reuses data from `lib/timeline-data.ts`.
+
+Key characteristics:
+
+- Uses `IntersectionObserver` with `threshold: 0.2` to trigger per-item fade-in animations
+- Each item transitions from `opacity-0 translate-y-8` to `opacity-100 translate-y-0` when it enters the viewport
+- Items are rendered using `TimelineGridTile` with `variant="mobile"`
+- The heading "Our Journey" and closing tagline "Let's continue making history" use the `font-figtree italic font-bold` class with an orange-to-red gradient
+
+```typescript components/organisms/MobileTimeline.tsx
+const observer = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        const index = parseInt(entry.target.getAttribute('data-index') || '0')
+        setVisibleItems((prev) => new Set(prev).add(index))
+      }
+    })
+  },
+  { threshold: 0.2 }
+)
+```
+
+<Tip>
+  Items are only added to `visibleItems`, never removed. Once an entry animates in it stays visible, which prevents re-animation on scroll-up.
+</Tip>
+
+## Theme constants
+
+All colors in the schedule page are controlled through a `theme` object defined at the top of the component. To change the accent color, update the values there rather than editing individual class names.
+
+```typescript
+const theme = {
+  gradients: {
+    background: 'bg-gradient-to-br from-orange-50 via-white to-red-50',
+    eventHighlight: 'bg-gradient-to-r from-orange-100 to-red-100',
+    eventHighlightStatic: 'bg-gradient-to-r from-orange-50 to-red-50'
+  },
+  colors: {
+    highlight: 'text-orange-600',
+    ring: 'ring-orange-200',
+    border: 'border-orange-300'
+  }
+}
+```

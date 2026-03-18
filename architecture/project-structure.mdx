@@ -1,0 +1,227 @@
+---
+title: "Project structure"
+description: "Full directory layout of the NJ Rajat Mahotsav platform, including component hierarchy, pages, utilities, hooks, and contexts."
+---
+
+The repository follows Next.js 15 App Router conventions and organizes components using Atomic Design principles.
+
+## Top-level directory layout
+
+```
+.
+├── app/                  # Next.js App Router pages and API routes
+├── components/           # React components (Atomic Design)
+├── contexts/             # React context providers
+├── hooks/                # Custom React hooks
+├── lib/                  # Utility functions and static data
+├── utils/                # Infrastructure helpers (Supabase client)
+├── styles/               # Feature-specific CSS files
+├── types/                # TypeScript type declarations
+├── public/               # Static files served as-is
+├── docs/                 # Internal docs and Supabase migration files
+├── middleware.ts          # Auth session refresh middleware
+├── next.config.mjs       # Next.js build configuration
+├── tailwind.config.js    # Tailwind CSS configuration
+├── tsconfig.json         # TypeScript compiler options
+└── components.json       # shadcn/ui registry configuration
+```
+
+## App Router pages
+
+All pages live under `app/` and use the Next.js 15 App Router file convention:
+
+```
+app/
+├── page.tsx                        # / — main landing page
+├── layout.tsx                      # Root layout (providers, fonts, metadata)
+├── globals.css                     # Global styles and CSS custom properties
+├── registration/
+│   └── page.tsx                    # /registration — multi-step registration form
+├── schedule/
+│   └── page.tsx                    # /schedule — interactive event timeline
+├── community-seva/
+│   └── page.tsx                    # /community-seva — community service form
+├── spiritual-seva/
+│   └── page.tsx                    # /spiritual-seva — spiritual service form
+├── guest-services/
+│   └── page.tsx                    # /guest-services — guest info page
+├── admin/
+│   └── registrations/
+│       ├── page.tsx                # /admin/registrations — protected dashboard
+│       └── unauthorized/
+│           └── page.tsx            # /admin/registrations/unauthorized
+├── auth/
+│   └── callback/
+│       └── route.ts                # /auth/callback — OAuth redirect handler
+└── api/
+    └── download/
+        └── route.ts                # /api/download — URL-allowlisted R2 proxy
+```
+
+## Component hierarchy (Atomic Design)
+
+All components live under `components/` and are organized by atomic level. Prefer importing from index files (`components/atoms`, `components/molecules`, etc.) when they exist.
+
+### Atoms
+
+Basic, unstyled building blocks with no internal composition:
+
+```
+components/atoms/
+├── loading-screen        # Full-page loading overlay shown on initial load
+├── theme-provider        # next-themes wrapper (forced to light mode)
+├── typewriter            # Animated character-by-character text reveal
+└── scroll-to-top         # Floating button to scroll back to page top
+```
+
+### Molecules
+
+Simple composites of one or more atoms:
+
+```
+components/molecules/
+├── guru-card             # Profile card for spiritual leaders
+├── date-picker           # react-day-picker integration with custom styling
+├── phone-input           # react-phone-number-input integration
+└── countdown-timer*      # Event countdown with days/hours/minutes/seconds
+```
+
+### Organisms
+
+Complex, self-contained UI sections that combine multiple molecules:
+
+```
+components/organisms/
+├── navigation            # Desktop + mobile navigation with floating menu button
+├── floating-menu-button  # Mobile FAB menu
+├── sticky-footer         # Persistent footer with temple info and links
+├── carousels             # Embla Carousel-based image carousels
+├── galleries             # Photo gallery grids with lightbox
+├── forms/
+│   ├── registration-form # Multi-step registration form (React Hook Form + Zod)
+│   ├── seva-form         # Shared seva submission form base
+│   └── *
+├── timeline              # Event schedule timeline (mobile + desktop variants)
+├── video-schema          # JSON-LD VideoObject structured data
+└── *                     # Additional section organisms (hero, stats, etc.)
+```
+
+### Templates
+
+Page-level layout wrappers (currently minimal — most layout logic lives in organisms or individual pages):
+
+```
+components/templates/
+└── *                     # Page layout shells
+```
+
+### UI (shadcn/ui)
+
+Shadcn/ui components are kept in their own directory so they can be updated independently with the CLI without touching custom code:
+
+```
+components/ui/
+├── accordion.tsx
+├── alert-dialog.tsx
+├── badge.tsx
+├── button.tsx
+├── calendar.tsx
+├── card.tsx
+├── checkbox.tsx
+├── dialog.tsx
+├── dropdown-menu.tsx
+├── input.tsx
+├── label.tsx
+├── popover.tsx
+├── progress.tsx
+├── select.tsx
+├── separator.tsx
+├── sheet.tsx
+├── skeleton.tsx
+├── sonner.tsx
+├── table.tsx
+├── tabs.tsx
+├── toast.tsx
+├── tooltip.tsx
+└── *
+```
+
+## Contexts
+
+```
+contexts/
+└── audio-context.tsx     # AudioProvider + useAudioContext hook
+                          # Manages HTMLAudioElement, fade controls,
+                          # user-consent gating, and playback state
+```
+
+## Custom hooks
+
+```
+hooks/
+├── use-audio.ts                # Low-level audio playback utilities
+├── use-device-type.ts          # Detect mobile vs. desktop viewport
+├── use-intersection-observer.ts # Scroll-based animation triggers (IntersectionObserver)
+├── use-loading.tsx             # LoadingProvider + useLoading hook for global loading state
+└── use-toast.ts                # Toast notification queue (used by Sonner)
+```
+
+## Library utilities
+
+```
+lib/
+├── cdn-assets.ts         # Cloudflare R2 and Cloudflare Images URL helpers
+│                         #   getCloudflareImage(id) → bigger variant
+│                         #   getCloudflareImageMobileWp(id) → mobileWP variant
+│                         #   getCloudflareImageBiggest(id) → biggest variant
+├── timeline-data.ts      # Static event schedule and timeline entries
+├── admin-auth.ts         # ALLOWED_DOMAIN constant and domain validation logic
+└── utils.ts              # Shared utility functions (cn, etc.)
+```
+
+## Infrastructure utilities
+
+```
+utils/
+└── supabase/
+    ├── client.ts         # Browser-side Supabase client
+    ├── server.ts         # Server-side Supabase client (for Server Components)
+    └── middleware.ts     # updateSession() called by root middleware.ts
+```
+
+## Styles
+
+Feature-specific CSS that extends the global Tailwind setup:
+
+```
+styles/
+├── registration.css      # Registration form custom styles
+├── admin.css             # Admin dashboard custom styles
+└── community.css         # Community seva page custom styles
+```
+
+## TypeScript path aliases
+
+Defined in `tsconfig.json`, all aliases resolve from the project root:
+
+```json
+{
+  "paths": {
+    "@/*": ["./*"]
+  }
+}
+```
+
+In practice the common import prefixes are:
+
+| Alias | Resolves to |
+|---|---|
+| `@/components` | `/components` |
+| `@/lib` | `/lib` |
+| `@/hooks` | `/hooks` |
+| `@/contexts` | `/contexts` |
+| `@/utils` | `/utils` |
+
+<Tip>
+  The single `@/*` alias maps to the project root, so any subdirectory is reachable. The table above lists the conventional prefixes, not hard limits.
+</Tip>

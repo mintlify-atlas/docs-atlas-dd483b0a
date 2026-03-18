@@ -1,0 +1,579 @@
+---
+title: "Organisms"
+description: "Complex page sections that compose molecules and atoms into full UI regions."
+---
+
+Organisms are self-contained page sections. Each one typically represents a distinct visual block: the navigation bar, a form, a media gallery, or a hero section. Import from the organisms index:
+
+```typescript
+import {
+  Navigation,
+  FloatingMenuButton,
+  SevaSubmissionForm,
+  VideoSection,
+  ShaderBackground,
+  // ...
+} from '@/components/organisms'
+```
+
+<Note>
+The organisms `index.ts` re-exports 21 named components. Components not listed there (such as `DesktopNavigation`, `LandingPageMobile`, `PhotoAlbumModal`) are imported directly from their file path.
+</Note>
+
+## Navigation
+
+### Navigation
+
+**File:** `components/organisms/navigation.tsx`  
+**Exported as:** `Navigation`
+
+The primary site-wide navigation bar. On the home page it is `position: absolute` (overlays the hero); on all other pages it is `position: relative`. It renders:
+
+- A `NavBar` (tubelight style) on the left with all route links
+- The main logo and Maninagar logo grouped on the right
+- An Admin link injected dynamically when the logged-in user has an allowed admin email domain (checked via Supabase auth)
+
+The available width for the inline nav is calculated with `ResizeObserver` so the nav collapses gracefully without overflowing.
+
+```typescript
+// No props — all state managed internally
+<Navigation />
+```
+
+**Menu items:** Home, About the Mahotsav, Timeline, Registration, Invitation, Guest Services, Schedule, Seva (with Community Seva / Spiritual Seva sub-items), Latest Events, Media.
+
+---
+
+### DesktopNavigation
+
+**File:** `components/organisms/desktop-navigation.tsx`
+
+Alternate fixed navigation used on specific pages. Hides on scroll using a translate-y transition. Uses the `GlowMenu` component (`glow-menu.tsx`) for the menu bar and the `useDeviceType()` hook to conditionally show labels.
+
+```typescript
+// No props
+<DesktopNavigation />
+```
+
+Includes only four routes: Home, Timeline, Registration, Schedule.
+
+---
+
+### FloatingMenuButton
+
+**File:** `components/organisms/floating-menu-button.tsx`  
+**Exported as:** `FloatingMenuButton`
+
+Mobile floating action button fixed at `bottom-6 left-6`. Appears after scrolling 300 px. Tapping it opens an animated slide-up menu panel listing all site routes, with expandable sub-items for the Seva group.
+
+```typescript
+// No props — all state managed internally
+<FloatingMenuButton />
+```
+
+**Behaviour:**
+- Adapts icon colour based on background brightness (same algorithm as `ScrollToTop`)
+- Closes automatically on route change via `usePathname()`
+- Sub-items expand/collapse with framer-motion height animation
+- Active route highlighted with `bg-red-500/20`
+
+---
+
+### TubelightNavigation / TubelightNavbar
+
+**Files:** `components/organisms/tubelight-navigation.tsx`, `components/organisms/tubelight-navbar.tsx`  
+**Exported as:** `TubelightNavigation`
+
+The glowing "tubelight" animated underline nav used inside the primary `Navigation` component.
+
+---
+
+## Layout
+
+### TitleSection (landing-page.tsx)
+
+**File:** `components/organisms/landing-page.tsx`  
+**Exported as:** `TitleSection`
+
+Desktop hero section. Occupies the full viewport height and is split into two regions:
+
+- **Top 65%**: `Skiper53` animated image carousel (from `@skiper-ui`) fades in after the loading screen exits
+- **Bottom 40%**: Liquid glass card on a `slate-900` background, containing event title, location, `CountdownTimer`, and CTA buttons (Register Now / About the Mahotsav)
+
+```typescript
+interface TitleSectionProps {
+  targetDate?: string  // ISO 8601, default "2026-08-02T00:00:00"
+}
+```
+
+All motion elements are gated on `!isLoading` from `useLoading()`.
+
+---
+
+### TitleSectionMobile (landing-page-mobile.tsx)
+
+**File:** `components/organisms/landing-page-mobile.tsx`
+
+Mobile-specific hero section. Replaces the `Skiper53` carousel with a custom `MobileImageCarousel` — a horizontal fan of 8 guru portraits where tapping a panel expands it to 35% width.
+
+```typescript
+interface TitleSectionMobileProps {
+  targetDate?: string  // ISO 8601, default "2026-08-02T00:00:00"
+}
+```
+
+Images are loaded via `getCloudflareImageBiggest()` for full-resolution display.
+
+---
+
+### Header
+
+**File:** `components/organisms/header.tsx`  
+**Exported as:** `Header`
+
+Minimal page header with the Nxt (Vercel-style) logo SVG, a horizontal nav with three links (Features, Pricing, Docs), and a gooey-effect Login button group. Used on internal/utility pages.
+
+---
+
+### StickyFooter
+
+**File:** `components/organisms/sticky-footer.tsx`  
+**Exported as:** `StickyFooter`
+
+Site-wide footer with responsive desktop/mobile layouts. Contains:
+
+- Temple name and address (200 Swamibapa Way, Secaucus, NJ 07094)
+- Inspirational attribution to His Divine Holiness Acharya Shree Jitendriyapriyadasji Swamiji Maharaj
+- Social links: Maninagar website, YouTube, Instagram
+- Footer links: Privacy Policy, Contact Us, About
+
+Styled with a top border (`border-red-500/60`), backdrop blur, and `bg-title-section-bg`.
+
+---
+
+### StandardPageHeader
+
+**File:** `components/organisms/standard-page-header.tsx`  
+**Exported as:** `StandardPageHeader`
+
+Reusable animated page title block used at the top of interior pages.
+
+```typescript
+interface StandardPageHeaderProps {
+  title: string
+  subtitle?: string
+  description?: string
+  isLoaded?: boolean  // default true
+}
+```
+
+```typescript
+<StandardPageHeader
+  title="Event Schedule"
+  subtitle="July 29 – August 2, 2026"
+  description="Full programme for the Rajat Pratishtha Mahotsav."
+/>
+```
+
+Each text element animates in with a staggered `y: 30 → 0` framer-motion transition.
+
+---
+
+### ShaderBackground
+
+**File:** `components/organisms/shader-background.tsx`  
+**Exported as:** `ShaderBackground`
+
+Full-screen animated mesh gradient background using `@paper-design/shaders-react` `MeshGradient`. Wraps children in a `min-h-screen` container.
+
+```typescript
+interface ShaderBackgroundProps {
+  children: React.ReactNode
+}
+```
+
+**Performance tiering:**
+
+| Device | Primary speed | Secondary shader |
+|---|---|---|
+| Mobile | 0.20 | Disabled |
+| Tablet | 0.20 | Enabled |
+| Desktop | 0.55 | Enabled (opacity 50%) |
+
+On desktop only, SVG filters for a `glass-effect` and `gooey-filter` are injected into the DOM. Mouse enter/leave activates the `isActive` state (reserved for future interactive effects).
+
+Colours: `["#0D132D", "#0D132D", "#FFFFFF", "#F3F3F3"]` — deep navy to white.
+
+---
+
+### ScrollColorWrapper
+
+**File:** `components/organisms/scroll-color-wrapper.tsx`
+
+Wrapper that changes background colour on scroll, used for section transitions.
+
+---
+
+### ParallaxDivider
+
+**File:** `components/organisms/parallax-divider.tsx`
+
+Decorative section divider with a parallax scroll effect.
+
+---
+
+### ParallaxQuote
+
+**File:** `components/organisms/parallax-quote.tsx`
+
+Full-width quote block with parallax scrolling. Used between sections in the main page and video section.
+
+---
+
+## Forms
+
+### SevaSubmissionForm
+
+**File:** `components/organisms/seva-submission-form.tsx`  
+**Exported as:** `SevaSubmissionForm`
+
+Spiritual seva submission form on the `/spiritual-seva` page. Validates with `react-hook-form` + `zod` and submits to Supabase.
+
+**Fields:**
+
+| Field | Type | Required |
+|---|---|---|
+| First Name | Text | Yes |
+| Middle Name | Text | No |
+| Last Name | Text | Yes |
+| Ghaam | Text | Yes |
+| Phone Number | Phone (international) | Yes |
+| Country | Select | Yes |
+| Mandal | Select or auto-filled | Yes |
+| Seva Types | Checkboxes (multi-select) | Min 1 |
+| Seva counts | Number per selected type | Yes |
+
+**Seva types:** Malas, Dhyan (Minutes), Pradakshinas, Dandvats, Padyatras (KM)
+
+```typescript
+// No props — self-contained form
+<SevaSubmissionForm />
+```
+
+Country selection auto-fills Mandal for India (Maninagar), Australia (Perth), Canada (Toronto), and Kenya (Nairobi). England and USA show mandal dropdowns.
+
+Phone country code is inferred from the country selector using `react-phone-number-input`. On success, a toast is shown: "Seva recorded, {firstName}! Jay Shree Swaminarayan".
+
+---
+
+## Media
+
+### AudioPlayer
+
+**File:** `components/audio-player.tsx`  
+*(root components directory, not in organisms)*
+
+Persistent floating play/pause button for the background prayer audio. Fixed at `bottom-6 right-18 z-40`.
+
+```typescript
+// No props — reads from AudioContext
+<AudioPlayer />
+```
+
+The button:
+- Is only shown once audio is loaded (`isLoaded` from `AudioContext`)
+- Shows a `animate-float-attention` pulse animation until the user first scrolls
+- Adapts icon colour based on background brightness
+- Calls `toggle()` from `useAudioContext()` on click
+
+---
+
+### AashirwadVideoPlayer
+
+**File:** `components/organisms/aashirwad-video-player.tsx`  
+**Exported as:** `AashirwadVideoPlayer`
+
+Full-screen section with a Cloudflare Stream video embed. Shows a GIF thumbnail until the user clicks play, then replaces it with a lazy-loaded `<iframe>` with `autoplay=true`.
+
+```typescript
+// No props — video ID is hardcoded
+<AashirwadVideoPlayer />
+```
+
+Heading: "સુવર્ણ યુગ નો રજત મહોત્સવ / A Silver Celebration of a Golden Era"
+
+---
+
+### VideoSection
+
+**File:** `components/organisms/video-section.tsx`  
+**Exported as:** `VideoSection`
+
+YouTube video showcase section with three Rajat Mahotsav trailer/drone videos. Rendered as a 3-column grid on `xl` and above, and as an Embla swipe carousel below that. Auto-advances the mobile carousel every 4.5 seconds.
+
+```typescript
+// No props — video list is hardcoded
+<VideoSection />
+```
+
+When a `VideoCard` is played, background audio is paused via `useAudioContext().pause()`. Carousel slide changes reset the playing state.
+
+---
+
+### ImageCarouselModal
+
+**File:** `components/organisms/image-carousel-modal.tsx`  
+**Exported as:** `ImageCarouselModal`
+
+Full-screen lightbox modal for browsing an array of images. Navigation via prev/next buttons, dot indicators, and touch swipe (using framer-motion drag with a swipe power threshold).
+
+```typescript
+interface ImageCarouselModalProps {
+  images: string[]
+  title: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+```
+
+Images slide in/out with a directional spring animation (`stiffness: 300, damping: 30`).
+
+---
+
+### PhotoAlbumModal
+
+**File:** `components/organisms/photo-album-modal.tsx`
+
+Extended version of `ImageCarouselModal` accepting `EventPhoto[]` objects (with metadata) instead of plain strings. Adds keyboard navigation (← →, Escape) and an `initialIndex` prop for opening at a specific photo.
+
+```typescript
+interface PhotoAlbumModalProps {
+  photos: EventPhoto[]   // from lib/events-data.ts
+  title: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initialIndex?: number  // default 0
+}
+```
+
+---
+
+### ResponsiveImageGallery
+
+**File:** `components/organisms/responsive-image-gallery.tsx`  
+**Exported as:** `ResponsiveImageGallery`
+
+Shows exactly three images. On `md` and above renders a 3-column grid with staggered framer-motion entrance animations. On mobile it renders a `MobileSectionCarousel`.
+
+```typescript
+interface ResponsiveImageGalleryProps {
+  images: [ImageData, ImageData, ImageData]  // exactly 3
+}
+
+interface ImageData {
+  id: number
+  src: string
+  alt: string
+}
+```
+
+---
+
+### ImageMarquee
+
+**File:** `components/organisms/image-marquee.tsx`  
+**Exported as:** `ImageMarquee`
+
+Horizontally scrolling marquee of images, used for decorative photo strips.
+
+---
+
+### GuruCarousel
+
+**File:** `components/organisms/guru-carousel.tsx`  
+**Exported as:** `GuruCarousel`
+
+Horizontal scrolling carousel of `GuruCard` molecules displaying the lineage of gurus.
+
+---
+
+### MobileSectionCarousel
+
+**File:** `components/organisms/mobile-section-carousel.tsx`  
+**Exported as:** `MobileSectionCarousel`
+
+Embla-based swipe carousel for small screens. Used by `ResponsiveImageGallery` as its mobile fallback.
+
+---
+
+## Animations
+
+### MobileTimeline
+
+**File:** `components/organisms/MobileTimeline.tsx`  
+**Exported as:** `MobileTimeline`
+
+The full mobile-only timeline page component. Renders all entries from `lib/timeline-data.ts` as a stacked list of `TimelineGridTile` molecules. Items animate in using `IntersectionObserver` — each tile transitions from `opacity-0 translate-y-8` to visible when 20% enters the viewport.
+
+```typescript
+// No props — data from timeline-data.ts
+<MobileTimeline />
+```
+
+The component includes its own `FloatingMenuButton` and renders a closing tagline: "Let's continue making history".
+
+---
+
+### AnimatedTextSection
+
+**File:** `components/organisms/animated-text-section.tsx`  
+**Exported as:** `AnimatedTextSection`
+
+Section with text that animates in as it enters the viewport.
+
+---
+
+### StickyScrollReveal
+
+**File:** `components/organisms/sticky-scroll-reveal.tsx`
+
+Aceternity sticky-scroll reveal effect. Content scrolls while the display panel stays fixed.
+
+---
+
+### IntroVideoReveal
+
+**File:** `components/organisms/intro-video-reveal.tsx`
+
+Video reveal animation for the intro sequence.
+
+---
+
+### BentoInitiatives
+
+**File:** `components/organisms/bento-initiatives.tsx`  
+**Exported as:** `BentoInitiatives`
+
+Bento-grid layout showcasing the mahotsav's seva initiatives.
+
+---
+
+### PathOfServiceStory
+
+**File:** `components/organisms/path-of-service-story.tsx`  
+**Exported as:** `PathOfServiceStory`
+
+Narrative section telling the story of service contributions.
+
+---
+
+### PratisthataStory
+
+**File:** `components/organisms/pratishta-story.tsx`
+
+Section narrating the history of the temple's pratishtha (consecration).
+
+---
+
+### AashirwadSection
+
+**File:** `components/organisms/aashirwad-section.tsx`
+
+Decorative blessings (aashirwad) section.
+
+---
+
+### BhagwanSevaExamples
+
+**File:** `components/organisms/bhagwan-seva-examples.tsx`
+
+Showcases examples of spiritual seva for Bhagwan.
+
+---
+
+### VideoBackgroundSection
+
+**File:** `components/organisms/video-background-section.tsx`
+
+Section with a looping background video.
+
+---
+
+### VideoSchema
+
+**File:** `components/organisms/video-schema.tsx`
+
+Structured data (`<script type="application/ld+json">`) injection for video SEO.
+
+---
+
+### InvitationPDFViewer
+
+**File:** `components/organisms/invitation-pdf-viewer.tsx`
+
+Embeds the event invitation PDF on the `/invitation` page.
+
+---
+
+### EventDetailsModal
+
+**File:** `components/organisms/event-details-modal.tsx`
+
+Modal for displaying full details of a single event from the Latest Events page.
+
+---
+
+### EventsFilterBar
+
+**File:** `components/organisms/events-filter-bar.tsx`
+
+Filter controls (date range picker + search) for the Latest Events grid.
+
+---
+
+### EventsGrid
+
+**File:** `components/organisms/events-grid.tsx`
+
+Responsive grid of `EventCard` molecules on the Latest Events page.
+
+---
+
+### CalendarRAC
+
+**File:** `components/organisms/calendar-rac.tsx`
+
+Full `RangeCalendar` built with `react-aria-components`. Used inside `EventsDatePicker`.
+
+---
+
+### GlowMenu
+
+**File:** `components/organisms/glow-menu.tsx`
+
+Menu bar with a glow/highlight effect used inside `DesktopNavigation`.
+
+---
+
+## Summary by category
+
+<Columns cols={2}>
+  <Card title="Navigation" icon="navigation">
+    `Navigation`, `DesktopNavigation`, `FloatingMenuButton`, `TubelightNavigation`, `TubelightNavbar`, `GlowMenu`
+  </Card>
+  <Card title="Layout" icon="layout-panel-top">
+    `TitleSection`, `TitleSectionMobile`, `Header`, `StickyFooter`, `StandardPageHeader`, `ShaderBackground`, `ScrollColorWrapper`, `ParallaxDivider`, `ParallaxQuote`
+  </Card>
+  <Card title="Forms" icon="form-input">
+    `SevaSubmissionForm`, `CalendarRAC`, `EventsFilterBar`
+  </Card>
+  <Card title="Media" icon="image">
+    `AudioPlayer`, `AashirwadVideoPlayer`, `VideoSection`, `VideoBackgroundSection`, `ImageCarouselModal`, `PhotoAlbumModal`, `ResponsiveImageGallery`, `ImageMarquee`, `GuruCarousel`, `MobileSectionCarousel`
+  </Card>
+  <Card title="Animations" icon="sparkles">
+    `MobileTimeline`, `AnimatedTextSection`, `StickyScrollReveal`, `IntroVideoReveal`, `BentoInitiatives`, `PathOfServiceStory`
+  </Card>
+  <Card title="Content" icon="file-text">
+    `AashirwadSection`, `BhagwanSevaExamples`, `PratisthataStory`, `InvitationPDFViewer`, `EventDetailsModal`, `EventsGrid`, `VideoSchema`
+  </Card>
+</Columns>

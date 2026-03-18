@@ -1,0 +1,275 @@
+---
+title: "Molecules"
+description: "Simple composite components that combine atoms into reusable UI patterns."
+---
+
+Molecules compose atoms into self-contained interactive patterns. Import them from the molecules index:
+
+```typescript
+import {
+  GuruCard,
+  LazyDatePicker,
+  LazyPhoneInput,
+  ProgressCounter,
+  RegistrationDatePicker,
+  TimelineGridTile,
+  VideoCarouselButtons,
+  VideoCarouselDots,
+} from '@/components/molecules'
+```
+
+## Components
+
+### GuruCard
+
+**File:** `components/molecules/guru-card.tsx`  
+**Used in:** `GuruCarousel` organism
+
+Displays a single guru portrait in a styled card with a gradient border and a name overlay at the bottom. Images are loaded from Cloudflare Images using `getCloudflareImage(imageId)`.
+
+```typescript
+interface GuruCardProps {
+  imageId: string   // Cloudflare Images image ID
+  name: string      // Displayed in the bottom overlay
+  className?: string
+}
+```
+
+**Usage:**
+
+```typescript
+<GuruCard
+  imageId="6369e804-64ef-42fe-2bd7-ece677d9f200"
+  name="Swamibapa"
+/>
+```
+
+The image is rendered with a `grayscale` filter. On desktop, a gradient overlay animates in on hover via `group-hover:opacity-100`.
+
+---
+
+### CountdownTimer
+
+**File:** `components/molecules/countdown-timer.tsx`  
+**Used in:** `TitleSection` (landing page), `TitleSectionMobile`
+
+Live countdown to a target ISO date string. Updates every second via `setInterval`. Each time unit animates independently using framer-motion `AnimatePresence` with a vertical slide.
+
+```typescript
+interface CountdownTimerProps {
+  targetDate: string  // ISO 8601, e.g. "2026-08-02T00:00:00"
+}
+```
+
+**Usage:**
+
+```typescript
+<CountdownTimer targetDate="2026-08-02T00:00:00" />
+```
+
+The four units (Days, Hours, Minutes, Seconds) are rendered as `TimeUnit` sub-components with responsive sizing from `text-4xl` on mobile up to `text-8xl` at `2xl`.
+
+---
+
+### PhoneInput
+
+**File:** `components/molecules/phone-input.tsx`  
+**Used in:** `SevaSubmissionForm`, registration forms
+
+International phone number input built on `react-phone-number-input`. Composes a custom `CountrySelect` popover (with search) and a styled `InputComponent`.
+
+```typescript
+type PhoneInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'>
+  & Omit<RPNInput.Props<typeof RPNInput.default>, 'onChange'> & {
+    onChange?: (value: RPNInput.Value) => void
+  }
+```
+
+**Usage:**
+
+```typescript
+<PhoneInput
+  value={phoneValue}
+  defaultCountry="US"
+  onChange={(value) => setValue('phone', value)}
+/>
+```
+
+The country selector opens a `Popover` from `@/components/atoms/popover` with a searchable list of country options including flag icons and calling codes.
+
+<Note>
+The project also exports `LazyPhoneInput` from `components/molecules/lazy-phone-input.tsx`, which wraps `PhoneInput` in a dynamic import for code splitting. Use `LazyPhoneInput` in forms to reduce the initial bundle size.
+</Note>
+
+---
+
+### EventsDatePicker
+
+**File:** `components/molecules/events-date-picker.tsx`  
+**Used in:** Events filter bar on the `/latest-events` page
+
+Date range picker built with `react-aria-components` (`DateRangePicker`) and the internal `RangeCalendar` organism. Converts between native `Date` objects and `@internationalized/date` `CalendarDate` values.
+
+```typescript
+interface EventsDatePickerProps {
+  value: { start: Date | null; end: Date | null }
+  onChange: (value: { start: Date | null; end: Date | null }) => void
+  className?: string
+}
+```
+
+**Usage:**
+
+```typescript
+<EventsDatePicker
+  value={dateRange}
+  onChange={(range) => setDateRange(range)}
+/>
+```
+
+The calendar opens in a `Popover` with orange focus ring styling consistent with the registration theme.
+
+---
+
+### RegistrationDatePicker
+
+**File:** `components/molecules/registration-date-picker.tsx`  
+**Used in:** Event registration form
+
+Single-date picker variant using `react-aria-components`. Styled identically to `EventsDatePicker` but accepts a single `Date` value rather than a range.
+
+---
+
+### LazyDatePicker
+
+**File:** `components/molecules/lazy-date-picker.tsx`
+
+Dynamic-import wrapper around `RegistrationDatePicker` for code splitting. Use this in pages that don't always render the date picker.
+
+---
+
+### ProgressCounter
+
+**File:** `components/molecules/progress-counter.tsx`  
+**Used in:** Community Seva page stats section
+
+Animated stat card with a framer-motion number counter and a progress bar. The counter counts up from 0 to `current` on scroll entry. Requires an `inView` flag from `useIntersectionObserver`.
+
+```typescript
+interface ProgressCounterProps {
+  icon: LucideIcon
+  label: string
+  current: number   // Animated target value
+  target: number    // Goal value shown statically below
+  prefix?: string
+  suffix?: string
+  delay?: number    // Stagger delay in seconds
+  inView: boolean   // Trigger from useIntersectionObserver
+}
+```
+
+**Usage:**
+
+```typescript
+import { Users } from 'lucide-react'
+import { useIntersectionObserver } from '@/hooks/use-intersection-observer'
+
+function StatsSection() {
+  const { elementRef, isVisible } = useIntersectionObserver({ threshold: 0.3 })
+
+  return (
+    <div ref={elementRef}>
+      <ProgressCounter
+        icon={Users}
+        label="Registered Attendees"
+        current={1250}
+        target={2000}
+        delay={0}
+        inView={isVisible}
+      />
+    </div>
+  )
+}
+```
+
+---
+
+### TimelineGridTile
+
+**File:** `components/molecules/TimelineGridTile.tsx`  
+**Used in:** `MobileTimeline` organism, desktop timeline page
+
+Renders a single timeline entry with a year badge, title, and image. Supports two layout variants.
+
+```typescript
+interface TimelineGridTileProps {
+  item: TimelineItem   // from lib/timeline-data.ts
+  variant?: 'mobile' | 'desktop'
+}
+```
+
+**Variants:**
+
+<Tabs>
+  <Tab title="mobile">
+    Stacked layout: year badge + title on one row, full-width image with description overlay below.
+  </Tab>
+  <Tab title="desktop">
+    CSS grid layout with a parallax scroll effect (`data-scroll data-scroll-speed="1"`) via locomotive-scroll. Year badge appears at the bottom-left of the image.
+  </Tab>
+</Tabs>
+
+---
+
+### VideoCarouselButtons
+
+**File:** `components/molecules/video-carousel-buttons.tsx`  
+**Used in:** `VideoSection` organism
+
+Prev/Next navigation buttons for the Embla carousel. Exports `PrevButton`, `NextButton`, and a `usePrevNextButtons` hook that wires up the Embla API.
+
+---
+
+### VideoCarouselDots
+
+**File:** `components/molecules/video-carousel-dots.tsx`  
+**Used in:** `VideoSection` organism
+
+Dot indicators for the Embla carousel. Exports `DotButton` and a `useDotButton` hook.
+
+---
+
+### Other molecules
+
+<AccordionGroup>
+  <Accordion title="IphoneMock — components/molecules/iphone-mock.tsx">
+    iPhone frame mockup wrapper. Place content inside to display it inside a device frame.
+  </Accordion>
+  <Accordion title="Carousel — components/molecules/carousel.tsx">
+    Generic shadcn/ui carousel primitive used as a base.
+  </Accordion>
+  <Accordion title="Command — components/molecules/command.tsx">
+    shadcn/ui command palette. Used by `PhoneInput` for the searchable country list.
+  </Accordion>
+  <Accordion title="Dialog — components/molecules/dialog.tsx">
+    shadcn/ui dialog. Used by `ImageCarouselModal` and `PhotoAlbumModal` organisms.
+  </Accordion>
+  <Accordion title="CountrySelector — components/molecules/country-selector.tsx">
+    Project-specific country select used in `SevaSubmissionForm`.
+  </Accordion>
+  <Accordion title="EventCard — components/molecules/event-card.tsx">
+    Card for displaying a single event entry on the `/latest-events` page.
+  </Accordion>
+  <Accordion title="ScheduleCard — components/molecules/schedule-card.tsx">
+    Card for displaying a scheduled event on the `/schedule` page.
+  </Accordion>
+  <Accordion title="TransportCard — components/molecules/transport-card.tsx">
+    Card for transport/accommodation options on the Guest Services page.
+  </Accordion>
+  <Accordion title="3DPin — components/molecules/3d-pin.tsx">
+    Aceternity 3D pin component for interactive visual elements.
+  </Accordion>
+  <Accordion title="Toaster — components/molecules/toaster.tsx">
+    Toast container rendered in the root layout. Works with `useToast()` hook.
+  </Accordion>
+</AccordionGroup>

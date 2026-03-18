@@ -1,0 +1,165 @@
+---
+title: "Local Setup"
+description: "Set up the NJ Rajat Mahotsav platform for local development in under 10 minutes."
+---
+
+This guide walks you through cloning the repository, installing dependencies, configuring environment variables, and starting the development server.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Node.js 18+** — [Download from nodejs.org](https://nodejs.org)
+- **npm** (bundled with Node.js)
+- **Git**
+- A **Supabase** account — [supabase.com](https://supabase.com) (free tier works)
+- A **Cloudflare** account with R2 enabled — [cloudflare.com](https://cloudflare.com)
+
+## Setup steps
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/vijaykpatel/Rajat-Mahotsav-Website.git
+    cd Rajat-Mahotsav-Website
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+      ```bash yarn
+      yarn install
+      ```
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+
+    This installs all dependencies including Next.js 15, React 18, Supabase SDK, AWS SDK for R2, and all UI libraries.
+  </Step>
+
+  <Step title="Create your environment file">
+    Create a `.env.local` file in the project root:
+
+    ```bash .env.local
+    # Supabase
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+    # Cloudflare R2
+    R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+    R2_ACCESS_KEY_ID=your-r2-access-key-id
+    R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+    R2_BUCKET_NAME=your-bucket-name
+    R2_BUCKET_PREFIX=uploads/
+    ```
+
+    See [Environment Variables](/development/environment-variables) for details on where to find each value.
+  </Step>
+
+  <Step title="Set up your Supabase project">
+    1. Create a new Supabase project at [app.supabase.com](https://app.supabase.com)
+    2. Go to **Settings → API** and copy your **Project URL** and **anon public** key
+    3. Create the `registrations` table — the schema is documented in [Supabase Integration](/development/supabase)
+    4. Enable Google OAuth under **Authentication → Providers → Google** for admin access
+    5. Add `http://localhost:3000/auth/callback` as an allowed redirect URL
+  </Step>
+
+  <Step title="Set up Cloudflare R2">
+    1. In the Cloudflare dashboard, go to **R2 → Create bucket**
+    2. Name your bucket (e.g., `rajat-mahotsav-uploads`)
+    3. Go to **R2 → Manage R2 API Tokens → Create API Token**
+    4. Select **Object Read & Write** permissions scoped to your bucket
+    5. Copy the **Access Key ID**, **Secret Access Key**, and **S3 API endpoint**
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    npm run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) in your browser. The platform should load with the landing page.
+  </Step>
+</Steps>
+
+## Available scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the development server with hot reload |
+| `npm run build` | Create a production build |
+| `npm start` | Start the production server (requires `npm run build` first) |
+| `npm run lint` | Run ESLint (note: disabled during builds) |
+
+## Build configuration
+
+The `next.config.mjs` has several notable settings:
+
+```javascript next.config.mjs
+const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,   // ESLint errors won't fail the build
+  },
+  typescript: {
+    ignoreBuildErrors: true,     // TypeScript errors won't fail the build
+  },
+  images: {
+    unoptimized: true            // CDN handles optimization (Cloudflare Images)
+  },
+  experimental: {
+    optimizePackageImports: ['framer-motion'],  // Reduces bundle size
+  },
+}
+```
+
+<Note>
+  ESLint and TypeScript errors are ignored during builds because the project uses the Cloudflare CDN for image optimization rather than Next.js Image Optimization. Run `npm run lint` separately during development.
+</Note>
+
+## TypeScript path aliases
+
+The project uses path aliases defined in `tsconfig.json` for clean imports:
+
+| Alias | Resolves to |
+|---|---|
+| `@/components` | `/components` |
+| `@/lib` | `/lib` |
+| `@/hooks` | `/hooks` |
+| `@/contexts` | `/contexts` |
+| `@/utils` | `/utils` |
+
+```typescript Example usage
+import { Navigation } from '@/components/organisms'
+import { getCloudflareImage } from '@/lib/cdn-assets'
+import { useAudio } from '@/hooks/use-audio'
+```
+
+## Custom fonts
+
+The project uses three font families via CSS variables:
+
+| Variable | Font | Usage |
+|---|---|---|
+| `--font-figtree` | Figtree | Default sans-serif body text |
+| `--font-instrument-serif` | Instrument Serif | Decorative headings |
+| `--font-gujarati` | Noto Sans Gujarati | Gujarati script text |
+
+## Styling system
+
+The project uses **Tailwind CSS v4** with a custom color palette. Custom preset colors defined in global CSS:
+
+| Token | Usage |
+|---|---|
+| `preset-deep-navy` | Primary dark background |
+| `preset-navy-accent` | Navigation and card backgrounds |
+| `preset-zodiac-blue` | Accent blue |
+| `preset-light-gray` | Light text on dark backgrounds |
+| `preset-red` | Brand red (#df212b) |
+| `preset-bluish-gray` | Subtle borders and dividers |
+
+<Tip>
+  The theme is forced to light mode via `forcedTheme="light"` in the ThemeProvider. Dark mode toggle is not available in this project.
+</Tip>

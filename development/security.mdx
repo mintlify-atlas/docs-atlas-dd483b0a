@@ -1,0 +1,297 @@
+---
+title: "Security"
+description: "Security architecture, domain validation, and pre-deployment hardening for the NJ Rajat Mahotsav platform."
+---
+
+This page documents the security controls in place, the areas still requiring attention before production, and where to find the relevant code.
+
+<Note>
+  A security audit was completed on 2026-01-26. Critical SSRF and XSS vulnerabilities are fixed. The items marked with warnings below are recommendations from that audit that are not yet implemented.
+</Note>
+
+## Security architecture overview
+
+<CardGroup cols={2}>
+  <Card title="Google OAuth via Supabase" icon="key">
+    Admin sign-in uses Google OAuth brokered by Supabase Auth. Access is restricted to a single email domain (`@nj.sgadi.us`) enforced in both the auth callback and server-side route guards.
+  </Card>
+  <Card title="Row Level Security" icon="database">
+    Supabase Row Level Security (RLS) is enabled on the database. Policies restrict read and write access to the `registrations` and seva tables to authenticated admin users only.
+  </Card>
+  <Card title="URL allowlisting" icon="shield">
+    The `/api/download` route validates every requested URL against an explicit domain allowlist before proxying it. Private IP ranges and HTTP (non-TLS) URLs are blocked.
+  </Card>
+  <Card title="Security headers" icon="lock">
+    Five security headers are applied globally via `next.config.mjs`: `X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`, `Referrer-Policy`, and `Permissions-Policy`.
+  </Card>
+</CardGroup>
+
+## Authentication and domain restriction
+
+The admin portal at `/admin/registrations` uses Google OAuth via Supabase. After the OAuth flow completes, the auth callback at `/auth/callback` checks the signed-in user's email domain before granting access.
+
+Domain validation is implemented in `lib/admin-auth.ts`:
+
+```typescript title="lib/admin-auth.ts"
+const ALLOWED_DOMAIN = "@nj.sgadi.us"
+
+/**
+ * Checks if the given email is allowed for admin access.
+ * Returns true if email ends with @nj.sgadi.us (case-insensitive).
+ */
+export function isAllowedAdminDomain(email: string | null | undefined): boolean {
+  if (!email || typeof email !== "string") return false
+  return email.toLowerCase().endsWith(ALLOWED_DOMAIN.toLowerCase())
+}
+
+/**
+ * Checks if the given user has an allowed admin domain email.
+ */
+export function isAdminDomainUser(user: WithEmail | null | undefined): boolean {
+  return isAllowedAdminDomain(user?.email)
+}
+```
+
+To change the allowed domain, update the `ALLOWED_DOMAIN` constant in `lib/admin-auth.ts` and redeploy.
+
+**Authentication flow:**
+
+1. User visits `/admin/registrations` and clicks **Sign in with Google**.
+2. Supabase Auth redirects to Google's OAuth consent screen.
+3. After consent, Google redirects to the Supabase callback URL.
+4. Supabase sets session cookies and redirects to `/auth/callback`.
+5. `/auth/callback` calls `isAllowedAdminDomain()` on the session email.
+6. Authorized users proceed to the dashboard; unauthorized users are sent to `/admin/registrations/unauthorized`.
+
+See [Supabase Google OAuth Setup](/development/supabase) for the full configuration steps.
+
+## Session management
+
+Session refresh is handled by Next.js middleware in `middleware.ts`, which runs on every request except static files:
+
+```typescript title="middleware.ts"
+export async function middleware(request: NextRequest) {
+  return await updateSession(request)
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+}
+```
+
+`updateSession` (from `utils/supabase/middleware.ts`) reads the Supabase session from cookies and refreshes expired tokens transparently.
+
+## Row Level Security
+
+Supabase RLS restricts which database rows a user can read or write at the database layer, independent of application logic. The following tables require RLS policies:
+
+| Table | Access requirement |
+| --- | --- |
+| `registrations` | Admin users (`@nj.sgadi.us`) — read only |
+| `spiritual_seva_submission` | Admin users — read; public — insert |
+| `community_seva_records` | Admin users — read; public — insert |
+| `personal_seva_submission` | Admin users — read; public — insert |
+
+<Warning>
+  RLS policy status is listed as **unknown** in the security audit. Verify that policies are correctly configured in the Supabase dashboard (**Table Editor** → select table → **RLS**) before accepting production data.
+</Warning>
+
+All database queries use the Supabase SDK with parameterized queries, which prevents SQL injection by default. Never concatenate user input into raw SQL.
+
+## URL validation and download security
+
+The `/api/download` route proxies file downloads to prevent exposing direct CDN URLs in the client. It enforces:
+
+- **Domain allowlist** — only `cdn.njrajatmahotsav.com` and `imagedelivery.net` are permitted
+- **HTTPS-only** — HTTP URLs are rejected
+- **Private IP blocking** — loopback, RFC 1918, and link-local addresses are blocked
+- **10 MB file size limit** — checked via `Content-Length` header and blob size
+- **10-second timeout** — via `AbortSignal.timeout(10000)`
+- **Filename sanitization** — non-alphanumeric characters replaced with `_`
+
+```typescript title="app/api/download/route.ts"
+const ALLOWED_DOMAINS = [
+  'cdn.njrajatmahotsav.com',
+  'imagedelivery.net',
+]
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024  // 10 MB
+
+function isUrlAllowed(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+
+    // Only allow HTTPS
+    if (url.protocol !== 'https:') return false
+
+    // Check domain allowlist
+    const hostname = url.hostname.toLowerCase()
+    const isAllowed = ALLOWED_DOMAINS.some(domain =>
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    )
+    if (!isAllowed) return false
+
+    // Block private IP ranges
+    const privateIpPatterns = [
+      /^127\./, /^10\./, /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./, /^localhost$/i, /^0\.0\.0\.0$/, /^::1$/, /^fe80:/i,
+    ]
+    if (privateIpPatterns.some(p => p.test(hostname))) return false
+
+    return true
+  } catch {
+    return false
+  }
+}
+```
+
+## Security headers
+
+Five HTTP security headers are applied to every route via `next.config.mjs`:
+
+```javascript title="next.config.mjs (headers excerpt)"
+async headers() {
+  return [
+    {
+      source: '/(.*)',
+      headers: [
+        { key: 'X-Frame-Options',           value: 'DENY' },
+        { key: 'X-Content-Type-Options',    value: 'nosniff' },
+        { key: 'X-XSS-Protection',          value: '1; mode=block' },
+        { key: 'Referrer-Policy',           value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy',        value: 'camera=(), microphone=(), geolocation=()' },
+      ],
+    },
+  ]
+},
+```
+
+| Header | Value | Effect |
+| --- | --- | --- |
+| `X-Frame-Options` | `DENY` | Prevents the site from being embedded in an `<iframe>` (clickjacking protection) |
+| `X-Content-Type-Options` | `nosniff` | Stops browsers from MIME-sniffing responses away from the declared content type |
+| `X-XSS-Protection` | `1; mode=block` | Enables the browser's built-in XSS filter |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Limits referrer information sent to cross-origin requests |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Disables camera, microphone, and geolocation access |
+
+## Environment variable protection
+
+All secrets are stored in environment variables — no hardcoded credentials exist in the codebase. `.env.local` is listed in `.gitignore` and is never committed.
+
+<Tip>
+  Use separate Supabase projects and R2 buckets for development, staging, and production. Rotate R2 API tokens regularly and consider a secrets manager (e.g. Vercel's built-in encrypted env vars or an external vault) for production credentials.
+</Tip>
+
+## Email validation
+
+Registration forms validate email addresses with a Zod schema that goes beyond format checking — it also verifies the top-level domain against the IANA TLD list to catch common typos:
+
+```typescript title="lib/email-validation.ts"
+import { z } from "zod"
+import { TLDs } from "global-tld-list"
+
+function extractTld(email: string): string | null {
+  const atIndex = email.lastIndexOf("@")
+  if (atIndex === -1) return null
+  const domain = email.slice(atIndex + 1).toLowerCase()
+  const lastDot = domain.lastIndexOf(".")
+  if (lastDot === -1) return null
+  return domain.slice(lastDot + 1)
+}
+
+export const emailSchema = z
+  .string()
+  .min(1, "Email is required")
+  .email("Invalid email address")
+  .refine(
+    (email) => {
+      const tld = extractTld(email)
+      if (!tld) return false
+      return TLDs.isValid(tld)
+    },
+    {
+      message:
+        "Please check your email domain (e.g. use .com not .clm). Enter a valid email address.",
+    }
+  )
+```
+
+<Note>
+  This validation runs client-side only. Before going to production, duplicate the same Zod schema in the relevant API routes so validation is enforced server-side regardless of what the client sends.
+</Note>
+
+## Pre-deployment security checklist
+
+Complete every item below before accepting real user data.
+
+<AccordionGroup>
+  <Accordion title="1. Configure Supabase RLS policies">
+    Enable and verify Row Level Security on all four tables (`registrations`, `spiritual_seva_submission`, `community_seva_records`, `personal_seva_submission`) in the Supabase dashboard.
+
+    - Confirm admin-only read policies for `registrations`
+    - Confirm public-insert / admin-read policies for seva tables
+    - Test policies by attempting reads/writes with a non-admin session
+  </Accordion>
+
+  <Accordion title="2. Set admin domain">
+    Update `ALLOWED_DOMAIN` in `lib/admin-auth.ts` to match your organization's email domain. The current value is `@nj.sgadi.us`.
+
+    ```typescript
+    const ALLOWED_DOMAIN = "@nj.sgadi.us"  // change this if needed
+    ```
+
+    After changing, redeploy and verify that a non-matching Google account is blocked.
+  </Accordion>
+
+  <Accordion title="3. Add rate limiting">
+    API routes (`/api/download`, `/api/generate-upload-urls`, `/api/generate-cs-personal-submision-upload-urls`) are currently unauthenticated and have no rate limiting. Add rate limiting before go-live.
+
+    The Supabase-recommended approach uses Upstash Redis with the `@upstash/ratelimit` package:
+
+    ```typescript
+    import { Ratelimit } from "@upstash/ratelimit"
+
+    const ratelimit = new Ratelimit({
+      redis: redis,
+      limiter: Ratelimit.slidingWindow(10, "10 s"),
+    })
+    ```
+
+    Alternatively, use [Vercel's built-in rate limiting](https://vercel.com/docs/security/rate-limiting) available on Pro and Enterprise plans.
+  </Accordion>
+
+  <Accordion title="4. Enable CSRF protection">
+    No CSRF tokens are currently added to forms or verified in API routes. Before launch:
+
+    - Add `SameSite=Strict` or `SameSite=Lax` to session cookies (Supabase handles this, but verify the setting)
+    - Add CSRF tokens to all mutating forms
+    - Verify tokens in the corresponding API route handlers
+  </Accordion>
+
+  <Accordion title="5. Add server-side input validation">
+    Registration and seva forms currently use Zod schemas for client-side validation only. Duplicate all Zod schemas inside the API route handlers so that validation is enforced at the server regardless of client behavior. Never trust client-supplied data.
+  </Accordion>
+
+  <Accordion title="6. File upload security">
+    File upload endpoints currently accept client-controlled content types with no server-side validation. Before launch:
+
+    - Validate file magic bytes server-side (not just the `Content-Type` header)
+    - Enforce a file type allowlist (e.g. `image/jpeg`, `image/png`, `application/pdf`)
+    - Set strict maximum file sizes
+    - Randomize uploaded filenames to prevent enumeration
+    - Consider virus scanning for untrusted uploads
+  </Accordion>
+</AccordionGroup>
+
+## Fixed vulnerabilities
+
+The following issues were identified in the 2026-01-26 security audit and are resolved.
+
+| Issue | Severity | Location | Fix |
+| --- | --- | --- | --- |
+| SSRF via download proxy | Critical | `app/api/download/route.ts` | URL allowlist, HTTPS-only, private IP blocking, size limits |
+| XSS via `dangerouslySetInnerHTML` | High | `components/organisms/standard-page-header.tsx` | Removed; all user content rendered safely |
+| PII in console logs | Medium | Registration form handlers | Removed all `console.log` calls containing PII |
+| Missing security headers | Medium | `next.config.mjs` | Five headers added globally |

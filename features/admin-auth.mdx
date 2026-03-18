@@ -1,0 +1,141 @@
+---
+title: "Admin authentication"
+description: "How the admin portal authenticates users via Google OAuth and enforces the @nj.sgadi.us domain restriction."
+---
+
+The admin portal uses Google OAuth through Supabase Auth. Domain validation is enforced both on the server-rendered page and on every API route handler, so no registration data is exposed to unauthorized users regardless of how they reach the endpoint.
+
+## Domain restriction
+
+Only Google accounts whose email address ends with `@nj.sgadi.us` are granted access. This is enforced by two functions in `lib/admin-auth.ts`:
+
+```typescript lib/admin-auth.ts
+const ALLOWED_DOMAIN = "@nj.sgadi.us"
+
+/**
+ * Checks if the given email is allowed for admin access.
+ * Returns true if email ends with @nj.sgadi.us (case-insensitive).
+ */
+export function isAllowedAdminDomain(email: string | null | undefined): boolean {
+  if (!email || typeof email !== "string") return false
+  return email.toLowerCase().endsWith(ALLOWED_DOMAIN.toLowerCase())
+}
+
+/**
+ * Checks if the given user has an allowed admin domain email.
+ */
+export function isAdminDomainUser(user: { email?: string | null } | null | undefined): boolean {
+  return isAllowedAdminDomain(user?.email)
+}
+```
+
+`isAdminDomainUser` is called in:
+- `app/admin/registrations/page.tsx` — server component, redirects to `/admin/registrations/unauthorized` on failure
+- `app/api/admin/registrations/route.ts` — returns `403 Forbidden`
+- `app/api/admin/registrations/export/route.ts` — returns `403 Forbidden`
+- `app/api/admin/registrations/count/route.ts` — returns `403 Forbidden`
+
+<Tip>
+To change the allowed domain, update the `ALLOWED_DOMAIN` constant in `lib/admin-auth.ts`. No other code changes are required.
+</Tip>
+
+## Authentication flow
+
+<Steps>
+  <Step title="User visits /admin/registrations">
+    The server component calls `supabase.auth.getUser()`. If no active session is found, the sign-in page is rendered with the `AdminSignIn` component.
+  </Step>
+  <Step title="User clicks 'Sign in with Google'">
+    The client sets a short-lived `rm-auth-next` cookie (10 minutes, `SameSite=Lax`) that stores the post-auth destination path (`/admin/registrations`). This cookie persists across subdomain redirects on `njrajatmahotsav.com` via a `Domain=.njrajatmahotsav.com` attribute on production.
+
+    ```typescript
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    ```
+  </Step>
+  <Step title="Google OAuth redirect to /auth/callback">
+    The callback route at `app/auth/callback/route.ts` reads the `code` query parameter and exchanges it for a Supabase session:
+
+    ```typescript
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    ```
+
+    If the exchange fails, the user is redirected to `/auth/auth-code-error`.
+  </Step>
+  <Step title="Destination redirect">
+    After a successful session exchange, the callback reads the destination from the `rm-auth-next` cookie (falling back to the `next` query param, then `/`). The cookie is cleared and the user is redirected to `/admin/registrations`.
+  </Step>
+  <Step title="Domain check">
+    Back on the server component, `isAdminDomainUser(user)` validates the session email. Accounts outside `@nj.sgadi.us` are redirected to `/admin/registrations/unauthorized`. Authorized users see the full dashboard.
+  </Step>
+</Steps>
+
+## Session refresh via middleware
+
+The Next.js middleware (`utils/supabase/middleware.ts`) calls `supabase.auth.getClaims()` on every request to keep the Supabase session cookie fresh. For all `/admin` routes and `/api/registrations/export`, it also sets `Cache-Control: no-store, max-age=0` to prevent any caching of sensitive responses.
+
+```typescript utils/supabase/middleware.ts
+export async function updateSession(request: NextRequest) {
+  // ... create server client ...
+  await supabase.auth.getClaims() // refreshes session token in cookies
+
+  if (
+    request.nextUrl.pathname.startsWith("/admin") ||
+    request.nextUrl.pathname === "/api/registrations/export"
+  ) {
+    supabaseResponse.headers.set("Cache-Control", "no-store, max-age=0")
+  }
+
+  return supabaseResponse
+}
+```
+
+## Supabase client setup
+
+Two Supabase client helpers are used:
+
+| Helper | File | Used in |
+|---|---|---|
+| `createBrowserClient` | `utils/supabase/client.ts` | `AdminSignIn` (OAuth initiation, sign-out) |
+| `createServerClient` | `utils/supabase/server.ts` | Server components, Route Handlers (session reads) |
+
+The server client reads and writes session cookies via the Next.js `cookies()` API. When called from a Server Component (where `setAll` is not permitted), cookie writes fail silently — the middleware handles the actual refresh.
+
+## Row Level Security
+
+All registration data in Supabase is protected by Row Level Security (RLS). The API routes use the server-side Supabase client, which carries the authenticated user's session. Queries are only permitted for users whose session satisfies the RLS policies defined on the `registrations` table.
+
+## Environment variables
+
+<Warning>
+Never commit these values to source control. Store them in `.env.local` (local development) or your deployment platform's secret manager.
+</Warning>
+
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes (preferred) | Supabase anon/publishable key |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Fallback | Legacy anon key name (still supported) |
+
+If either `NEXT_PUBLIC_SUPABASE_URL` or the key is missing, `utils/supabase/server.ts` throws a descriptive error listing which variables are absent, and the admin page renders an error message rather than crashing silently.
+
+## Security summary
+
+<AccordionGroup>
+  <Accordion title="What stops a non-@nj.sgadi.us user from accessing the API?">
+    Every API route handler independently calls `isAdminDomainUser(user)` after verifying the Supabase session. A missing or invalid session returns `401 Unauthorized`; a valid session with the wrong email returns `403 Forbidden`. The check is not delegated to middleware alone, so it cannot be bypassed by hitting the API directly.
+  </Accordion>
+  <Accordion title="Is the domain check only on the frontend?">
+    No. The server component at `app/admin/registrations/page.tsx` checks the domain and issues a redirect, but this is a UX layer. The underlying API routes (`/api/admin/registrations`, `/api/admin/registrations/export`, `/api/admin/registrations/count`) each perform the same `isAdminDomainUser` check independently.
+  </Accordion>
+  <Accordion title="What happens if Supabase is not configured?">
+    `utils/supabase/server.ts` throws an error listing the missing environment variables. The admin page catches this and renders a descriptive message with instructions to check `.env.local`. No stack trace or secret is exposed to the user.
+  </Accordion>
+  <Accordion title="Are there any hardcoded credentials?">
+    No. All Supabase credentials are read exclusively from environment variables. The only hardcoded auth-related value is the `ALLOWED_DOMAIN` constant (`@nj.sgadi.us`) in `lib/admin-auth.ts`, which is not a secret.
+  </Accordion>
+</AccordionGroup>

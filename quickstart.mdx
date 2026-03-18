@@ -1,80 +1,144 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get the NJ Rajat Mahotsav event platform running locally in under five minutes."
 ---
 
-## Get started in three steps
+This guide walks you through cloning the repository, installing dependencies, configuring environment variables, and running the development server.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
+  <Step title="Check prerequisites">
+    Make sure you have the following before starting:
 
-### Step 1: Set up your local environment
+    - **Node.js 18+** — the platform uses Next.js 15 which requires Node 18 or later
+    - **npm** — bundled with Node.js
+    - **Supabase account** — used for the PostgreSQL database and Google OAuth authentication
+    - **Cloudflare account** — with R2 object storage and Cloudflare Images configured
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Verify your Node.js version:
 
-### Step 2: Deploy your changes
+    ```bash
+    node --version
+    ```
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/vijaykpatel/Rajat-Mahotsav-Website.git
+    cd Rajat-Mahotsav-Website
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Install dependencies">
+    <CodeGroup>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash npm
+    npm install
+    ```
 
-### Step 3: Go live
+    ```bash yarn
+    yarn install
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash pnpm
+    pnpm install
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env.local` file in the project root. All seven variables below are required for the platform to function:
+
+    ```bash .env.local
+    # Supabase — database and authentication
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+    # Cloudflare R2 — object storage
+    R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+    R2_ACCESS_KEY_ID=your-r2-access-key-id
+    R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+    R2_BUCKET_NAME=your-bucket-name
+    R2_BUCKET_PREFIX=your-bucket-prefix
+    ```
+
+    | Variable | Description |
+    |---|---|
+    | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL, found in Project Settings → API |
+    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anonymous (public) key |
+    | `R2_ENDPOINT` | Cloudflare R2 S3-compatible endpoint for your account |
+    | `R2_ACCESS_KEY_ID` | R2 API token access key ID |
+    | `R2_SECRET_ACCESS_KEY` | R2 API token secret key |
+    | `R2_BUCKET_NAME` | Name of your R2 bucket |
+    | `R2_BUCKET_PREFIX` | Path prefix used for all R2 uploads |
+
+    <Note>
+      `NEXT_PUBLIC_*` variables are exposed to the browser. Never place secret keys in variables with this prefix.
+    </Note>
+  </Step>
+
+  <Step title="Run the development server">
+    ```bash
+    npm run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) in your browser. The platform loads with a full-page loading screen before revealing the main landing page.
+  </Step>
+
+  <Step title="Explore the platform">
+    Once the server is running you can navigate to any of the main sections:
+
+    <CardGroup cols={2}>
+      <Card title="Landing page" icon="house" href="http://localhost:3000">
+        Main event landing page with media galleries, countdown, and schedule highlights.
+      </Card>
+      <Card title="Registration" icon="clipboard" href="http://localhost:3000/registration">
+        Multi-step event registration form backed by Supabase.
+      </Card>
+      <Card title="Schedule" icon="calendar" href="http://localhost:3000/schedule">
+        Interactive timeline of event programs (July 29 – August 2, 2026).
+      </Card>
+      <Card title="Admin dashboard" icon="shield" href="http://localhost:3000/admin/registrations">
+        Protected portal requiring Google OAuth sign-in with an authorized domain.
+      </Card>
+    </CardGroup>
+
+    <Warning>
+      The admin portal at `/admin/registrations` requires a Google account whose email domain matches the value of `ALLOWED_DOMAIN` in `lib/admin-auth.ts`. Sign-in attempts from other domains are redirected to `/admin/registrations/unauthorized`.
+    </Warning>
+  </Step>
+</Steps>
+
+## Available scripts
+
+```bash
+# Development server with hot reload
+npm run dev
+
+# Production build
+npm run build
+
+# Start production server (requires a build first)
+npm start
+
+# Run the linter
+npm run lint
+```
+
+<Note>
+  `eslint.ignoreDuringBuilds` and `typescript.ignoreBuildErrors` are both set to `true` in `next.config.mjs`, so `npm run build` will succeed even with outstanding type or lint errors.
+</Note>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Architecture overview" icon="sitemap" href="/architecture/overview">
+    Understand the global provider tree, routing, and data flow.
+  </Card>
+  <Card title="Project structure" icon="folder" href="/architecture/project-structure">
+    Explore the full directory layout and Atomic Design component hierarchy.
+  </Card>
+  <Card title="Tech stack" icon="layer-group" href="/architecture/tech-stack">
+    Review all dependencies and the rationale behind each technology choice.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

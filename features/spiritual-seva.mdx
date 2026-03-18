@@ -1,0 +1,204 @@
+---
+title: "Spiritual Seva"
+description: "Devotee submission system for tracking personal spiritual practices during the Rajat Mahotsav year-long journey."
+---
+
+The Spiritual Seva page at `/spiritual-seva` invites devotees to deepen their faith through a structured, year-long program of personal spiritual practice. In celebration of the Temple's Rajat Mahotsav, each haribhakt commits to monthly niyams (disciplines) grounded in the four pillars: **Dharma, Gnyan, Vairagya, and Bhakti**.
+
+<Note>
+  Spiritual seva runs over a ten-month period from **October 2025 to July 2026**. A live checkpoint of individual totals is held on **January 1st** to celebrate progress and inspire continued dedication.
+</Note>
+
+## Monthly spiritual goals
+
+Each devotee is encouraged to complete the following targets every month:
+
+| Seva | Target | Description |
+|---|---|---|
+| Malas | 250 | Meditational prayer beads |
+| Dhyaan | 250 min | Full body meditation |
+| Pradakshinas | 250 | Clockwise devotion around the sihasan |
+| Dandvats | 250 | Physical devotion to Lord Swaminarayan |
+| Padyatras | 25 | Walks to the Mandir |
+| Upvas | 25 | Fast for a full day |
+
+## Sacred scripture parayans
+
+Devotees are also inspired to complete readings of sacred scriptures. Three parayans are recommended:
+
+<CardGroup cols={3}>
+  <Card title="Sadachar Sandesh" icon="book-open">
+    Teachings of Prem Murti Acharya Swamishree Maharaj. Available in Gujarati and English.
+  </Card>
+  <Card title="Harignanamrut Kavya" icon="book-open">
+    Kirtans composed by Jeevanpran Shree Muktajeevan Swamibapa. Available in Gujarati (4 parts) and English transliteration.
+  </Card>
+  <Card title="Bapashree ni Vato" icon="book-open">
+    Discourses by Jeevanpran Shree Abji Bapashree. Available in Gujarati (2 parts) and English (2 parts).
+  </Card>
+</CardGroup>
+
+## Submission form
+
+Devotees submit their spiritual seva at `/spiritual-seva/submit` using the `SevaSubmissionForm` component (`components/organisms/seva-submission-form.tsx`).
+
+### Form fields
+
+| Field | Required | Validation |
+|---|---|---|
+| First name | Yes | Letters only (`/^[A-Za-z]+$/`) |
+| Middle name | No | Letters only if provided |
+| Last name | Yes | Letters only |
+| Ghaam | Yes | Letters only |
+| Phone number | Yes | `isValidPhoneNumber()` via `react-phone-number-input` |
+| Country | Yes | Selector: Australia, Canada, England, India, Kenya, USA |
+| Mandal | Yes | Derived from country (dropdown or auto-filled) |
+| Seva types | Yes (≥1) | Checkbox selection from: Malas, Dhyan (Minutes), Pradakshinas, Dandvats, Padyatras (KM) |
+| Count per seva | Yes | Positive integer for each selected seva type |
+
+<Tip>
+  For India, Australia, Canada, and Kenya, the Mandal field is auto-filled and disabled. For England and USA, a dropdown of specific mandals is shown (e.g., Bolton, London for England; Alabama, California, New Jersey, etc. for USA).
+</Tip>
+
+### Submission workflow
+
+<Steps>
+  <Step title="Fill personal details">
+    Enter first name, middle name (optional), last name, ghaam, phone number, country, and mandal.
+  </Step>
+  <Step title="Select seva types">
+    Check one or more seva categories. A numeric input field appears for each checked seva.
+  </Step>
+  <Step title="Enter seva counts">
+    Enter a positive integer for each selected seva type (e.g., 250 Malas, 180 minutes of Dhyan).
+  </Step>
+  <Step title="Submit">
+    Click **Submit Seva**. The form is validated with Zod before submission. A loading spinner (`Loader2`) is shown while the request is in flight.
+  </Step>
+  <Step title="Receive confirmation">
+    On success, a green Sonner toast displays: `"Seva recorded, {firstName}! Jay Shree Swaminarayan"`. On failure, a red toast displays the error message.
+  </Step>
+</Steps>
+
+### Zod schema
+
+```typescript
+const FormSchema = z.object({
+  firstName: z.string().min(1).regex(/^[A-Za-z]+$/),
+  middleName: z.string().optional().refine(
+    (val) => !val || /^[A-Za-z]+$/.test(val)
+  ),
+  lastName: z.string().min(1).regex(/^[A-Za-z]+$/),
+  ghaam: z.string().min(1).regex(/^[A-Za-z]+$/),
+  country: z.string().min(1),
+  mandal: z.string().min(1),
+  phoneCountryCode: z.string().min(1),
+  phone: z.string().min(1).refine(isValidPhoneNumber),
+  selectedSevas: z.array(z.string()).min(1),
+  malas: z.string().optional(),
+  dhyan: z.string().optional(),
+  pradakshinas: z.string().optional(),
+  dandvats: z.string().optional(),
+  padyatras: z.string().optional(),
+}).refine((data) => {
+  // All selected seva types must have a positive count
+  for (const seva of data.selectedSevas) {
+    const count = data[seva as keyof typeof data]
+    if (!count || parseInt(count as string) <= 0) return false
+  }
+  return true
+})
+```
+
+## File upload API
+
+Spiritual seva submissions that include file attachments (photos, documents) use a presigned URL flow to upload directly to **Cloudflare R2**.
+
+### API endpoint
+
+```
+POST /api/generate-upload-urls
+```
+
+<Note>
+  The source file for this handler has a typo in its filename: `app/api/generate-upload-ursl.ts`. It is implemented as a Next.js Pages API route (`NextApiRequest` / `NextApiResponse`), not an App Router route handler.
+</Note>
+
+### Request body
+
+```typescript
+type RequestBody = {
+  submissionId: string;   // UUID from the database row
+  eventName: string;      // Used to name the R2 folder
+  files: FileMetadata[];  // Array of { name: string; type: string }
+  directoryName: string;  // Top-level R2 prefix/folder
+}
+```
+
+### Response
+
+```typescript
+type ResponsePayload = {
+  uploadUrls?: { url: string; key: string; filename: string }[];
+  error?: string;
+}
+```
+
+### Upload flow
+
+<Steps>
+  <Step title="Request presigned URLs">
+    The client POSTs file metadata (name, MIME type) along with `submissionId`, `eventName`, and `directoryName` to `/api/generate-upload-urls`.
+  </Step>
+  <Step title="Server generates signed URLs">
+    For each file, the server constructs an R2 key in the format:
+
+    ```
+    {R2_BUCKET_PREFIX}{directoryName}/{submissionId}_{cleanEventName}/{filename}
+    ```
+
+    A `PutObjectCommand` is created and signed with `@aws-sdk/s3-request-presigner`. URLs expire in **600 seconds**.
+  </Step>
+  <Step title="Client uploads directly to R2">
+    The client performs a `PUT` request to each presigned URL with the file body and `Content-Type` header. No files pass through the Next.js server.
+  </Step>
+</Steps>
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `R2_ENDPOINT` | Cloudflare R2 S3-compatible endpoint URL |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | Target R2 bucket |
+| `R2_BUCKET_PREFIX` | Path prefix applied to all keys |
+
+## Toast notifications
+
+The form uses `useToast()` from `hooks/use-toast.ts` for feedback:
+
+| State | Style | Message |
+|---|---|---|
+| Success | `bg-green-500 text-white` | `"Seva recorded, {firstName}! Jay Shree Swaminarayan"` |
+| Error | `bg-red-500 text-white` | `"Submission failed" + error message` |
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="When does the ten-month seva period start and end?">
+    The spiritual seva period runs from **October 2025 through July 2026**, aligned with the lead-up to the Rajat Mahotsav event in late July 2026.
+  </Accordion>
+  <Accordion title="What is a Ghaam?">
+    Ghaam is the ancestral village name used within the Swaminarayan community to identify a devotee's family lineage. It is required for seva record-keeping.
+  </Accordion>
+  <Accordion title="What happens at the January 1st checkpoint?">
+    A live review of individual seva totals is conducted on January 1st, serving as a milestone celebration and opportunity to inspire devotees to continue through the remaining months.
+  </Accordion>
+  <Accordion title="Can devotees submit seva from outside the USA?">
+    Yes. The country selector and mandal dropdown support Australia, Canada, England, India, Kenya, and the USA. Devotees from India, Australia, Canada, and Kenya have their mandal auto-assigned.
+  </Accordion>
+  <Accordion title="Are file uploads required?">
+    No. File uploads are optional. The form can be submitted without attaching any photos or documents.
+  </Accordion>
+</AccordionGroup>

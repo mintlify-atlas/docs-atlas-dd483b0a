@@ -1,0 +1,114 @@
+---
+title: "Event Registration"
+description: "Overview of the attendee registration system for the NJ Rajat Mahotsav 2026 celebration."
+---
+
+The registration system lets attendees sign up for the Shree Ghanshyam Maharaj Rajat Pratishtha Mahotsav at Shree Swaminarayan Temple Secaucus. The form collects personal details, mandal affiliation, and arrival/departure dates, then writes directly to Supabase.
+
+## Event dates
+
+The celebration runs **July 27 – August 2, 2026**. The date picker accepts arrival and departure dates within the broader window of **July 23 – August 8, 2026** to accommodate travel on either side of the main programme.
+
+<Note>
+  Register each guest individually. All details help organisers plan the event experience for everyone.
+</Note>
+
+## Registration flow
+
+<Steps>
+  <Step title="Open the registration page">
+    Navigate to `/registration`. The page loads client-side after hydration to avoid server/client mismatch with the date picker and phone input.
+  </Step>
+  <Step title="Fill in personal details">
+    Enter first name, optional middle name, last name, age (1–99), and ghaam. All name fields accept letters only.
+  </Step>
+  <Step title="Select country and mandal">
+    Choose your country. For India, Australia, Canada, and Kenya the mandal is set automatically. For England and USA, choose a mandal from the dropdown.
+  </Step>
+  <Step title="Enter contact information">
+    Provide your email address and phone number. The phone input auto-selects the country dialling code based on the country you chose.
+  </Step>
+  <Step title="Pick arrival and departure dates">
+    Use the date range picker to select when you arrive and when you leave. Departure must be on or after arrival.
+  </Step>
+  <Step title="Submit">
+    Click **Register**. The form checks for an existing record matching your first name, age, email, and mobile number. If one exists it updates that record; otherwise it inserts a new row.
+  </Step>
+  <Step title="Receive confirmation">
+    A toast notification confirms success (`Jay Shree Swaminarayan`) or displays the error message if submission fails.
+  </Step>
+</Steps>
+
+## Key features
+
+<Columns cols={2}>
+  <Card title="Zod validation" icon="shield-check">
+    Every field is validated with a Zod schema before submission. Name fields require letters only, age must be 1–99, and email is checked against the IANA TLD list to catch common typos.
+  </Card>
+  <Card title="Smart duplicate handling" icon="arrows-rotate">
+    The form checks Supabase for an existing record matched on `first_name + age + email + mobile_number`. Matching records are updated rather than duplicated.
+  </Card>
+  <Card title="Adaptive mandal selector" icon="building">
+    Countries with a single mandal (India → Maninagar, Australia → Perth, Canada → Toronto, Kenya → Nairobi) auto-fill the field. England and USA show a dropdown.
+  </Card>
+  <Card title="Real-time feedback" icon="bell">
+    `useToast` from shadcn/ui shows green success or red error toasts immediately after submission resolves.
+  </Card>
+  <Card title="Supabase backend" icon="database">
+    All registrations are stored in the `registrations` table. The form calls the Supabase JS client directly — no intermediate API route is needed for writes.
+  </Card>
+  <Card title="Accessible phone input" icon="phone">
+    `react-phone-number-input` provides an international dial-code selector that synchronises with the country field, so the default dialling code is always correct.
+  </Card>
+</Columns>
+
+## Data collected
+
+The following fields are stored in the `registrations` table in Supabase:
+
+| Column | Type | Notes |
+|---|---|---|
+| `first_name` | text | Required, letters only |
+| `middle_name` | text | Optional, letters only |
+| `last_name` | text | Required, letters only |
+| `age` | integer | 1–99 |
+| `ghaam` | text | Required, letters only |
+| `country` | text | Stored as lowercase (e.g. `usa`) |
+| `mandal` | text | Stored as kebab-case (e.g. `new-jersey`) |
+| `email` | text | Validated against IANA TLD list |
+| `phone_country_code` | text | E.164 country code (e.g. `+1`) |
+| `mobile_number` | text | National number without country code |
+| `arrival_date` | text | ISO 8601 date string |
+| `departure_date` | text | ISO 8601 date string |
+
+## Mandal options
+
+Mandals are organised by country. The stored value is the display name lowercased with spaces replaced by hyphens.
+
+<Columns cols={2}>
+  <Card title="USA" icon="flag">
+    Alabama, California, Chicago, Delaware, Georgia, Horseheads, Kentucky, New Jersey, Ocala, Ohio, Seattle, Tennessee, Virginia
+  </Card>
+  <Card title="England" icon="flag">
+    Bolton, London
+  </Card>
+  <Card title="Fixed mandals" icon="lock">
+    India → Maninagar · Australia → Perth · Canada → Toronto · Kenya → Nairobi
+  </Card>
+</Columns>
+
+<Tip>
+  Use `mandalStoredToDisplay()` from `lib/mandal-options.ts` to convert stored values (e.g. `new-jersey`) back to display form (e.g. `New Jersey`) in admin views.
+</Tip>
+
+## Duplicate-registration behaviour
+
+The uniqueness key is the combination of **first name + age + email + mobile number**. Submitting again with the same four values overwrites the existing record, allowing attendees to correct mistakes or update their travel dates.
+
+<Warning>
+  Register each family member or guest separately. Reusing the same combination of first name, age, phone, and email will silently overwrite the previous entry.
+</Warning>
+
+## Admin export
+
+Admins with an `@nj.sgadi.us` email address can download a CSV of all registrations from `GET /api/registrations/export`. The endpoint streams data in chunks of 500 rows using keyset pagination to avoid memory spikes. See [Admin portal](/features/admin-portal) for details.

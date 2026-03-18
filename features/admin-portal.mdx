@@ -1,0 +1,71 @@
+---
+title: "Admin Portal"
+description: "Overview of the Rajat Mahotsav admin portal for managing event registrations and analytics."
+---
+
+The admin portal is a restricted internal dashboard available at `/admin/registrations`. It gives authorized staff real-time visibility into event registrations, attendance projections, and demographic breakdowns for the NJ Rajat Mahotsav (July 29 – August 2, 2026).
+
+<Warning>
+Access is restricted to Google accounts with an `@nj.sgadi.us` email address. Signing in with any other account redirects you to `/admin/registrations/unauthorized`.
+</Warning>
+
+## Access
+
+| Property | Value |
+|---|---|
+| Route | `/admin/registrations` |
+| Auth provider | Google OAuth via Supabase |
+| Allowed domain | `@nj.sgadi.us` |
+| Unauthorized redirect | `/admin/registrations/unauthorized` |
+
+The page is rendered server-side on every request (`export const dynamic = "force-dynamic"`). Unauthenticated visitors see a sign-in prompt; authenticated users with a non-allowed email are redirected immediately.
+
+## Dashboard layout
+
+After signing in, the dashboard renders in this order:
+
+1. **Header bar** — displays your signed-in email and a sign-out button.
+2. **Summary stat cards** — four animated metric tiles (Total Registrations, Peak Daily Attendance, Avg Daily Arrivals, Unique Ghaams).
+3. **Charts section** — three chart panels loaded lazily: Daily Expected Attendance (line), Arrivals by Date (bar), Departures by Date (bar), Highest Attendees by Ghaam (ranked table), Highest Attendees by Mandal (ranked table).
+4. **Registrations table** — paginated, filterable, and searchable table loaded on demand.
+
+## Features overview
+
+<CardGroup cols={2}>
+  <Card title="Registration stats" icon="chart-bar">
+    Animated summary cards show total registrations, peak daily attendance, average daily arrivals, and the number of unique Ghaams represented.
+  </Card>
+  <Card title="Attendance charts" icon="chart-line">
+    Recharts-powered visualizations for daily expected attendance, arrivals by date, and departures by date. Core event dates (Jul 27 – Aug 2) are highlighted with a shaded reference area.
+  </Card>
+  <Card title="Ghaam & Mandal breakdown" icon="map-pin">
+    Ranked tables showing the top 8 Ghaams and Mandals by attendee count. A "View all" dialog expands to the full sorted list.
+  </Card>
+  <Card title="Registrations table" icon="table">
+    Paginated table with full-text search, dropdown filters (Ghaam, Mandal, Country), and expandable age and date-range filters. Supports 25, 50, or 100 rows per page.
+  </Card>
+  <Card title="CSV export" icon="download">
+    Export the entire registration list or the current filtered view as a UTF-8 CSV with BOM. Filtered exports stream rows in chunks of 500 to handle large datasets.
+  </Card>
+  <Card title="Keyset pagination" icon="arrow-right">
+    The table uses cursor-based (keyset) pagination ordered by `id DESC`, enabling consistent performance as the dataset grows.
+  </Card>
+</CardGroup>
+
+## Stats data source
+
+Dashboard statistics are fetched from the Supabase `get_registrations_stats` RPC, scoped to the event date range defined in `lib/registration-date-range.ts`. The RPC returns:
+
+- `total_registrations` — total row count
+- `daily_expected_attendance` — projected attendees per calendar date
+- `counts_by_arrival_date` — registrant counts per arrival date
+- `counts_by_departure_date` — registrant counts per departure date
+- `counts_by_ghaam` — attendee counts keyed by Ghaam name
+- `counts_by_mandal` — attendee counts keyed by Mandal name
+
+If the RPC fails, the dashboard degrades gracefully and still renders the registrations table.
+
+## Related pages
+
+- [Authentication and authorization](/features/admin-auth)
+- [Dashboard features and API](/features/admin-dashboard)
